@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import Spinner from '../components/Spinner'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatDate } from '../lib/format'
@@ -176,7 +177,7 @@ export default function Loans() {
         <button onClick={openNew} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">+ Add Loan</button>
       </div>
 
-      {loading ? <p className="text-gray-400">Loading…</p> : loans.length === 0 ? (
+      {loading ? <Spinner /> : loans.length === 0 ? (
         <div className="text-center text-gray-500 mt-20">
           <p className="text-4xl mb-3">📋</p>
           <p className="text-lg font-medium">No loans yet</p>
@@ -387,7 +388,7 @@ export default function Loans() {
         <Modal title={`Payment History — ${histModal.name}`} onClose={() => setHistModal(null)}>
           <div className="max-h-[60vh] overflow-y-auto">
             {!payments[histModal.id] ? (
-              <p className="text-gray-400 text-sm">Loading…</p>
+              <Spinner />
             ) : payments[histModal.id].length === 0 ? (
               <p className="text-gray-500 text-sm text-center py-6">No payments recorded yet.</p>
             ) : (

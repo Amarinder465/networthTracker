@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import Spinner from '../components/Spinner'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency } from '../lib/format'
@@ -213,7 +214,7 @@ export default function Trips() {
     return acc
   }, {})
 
-  if (loading) return <div className="text-gray-400 mt-10 text-center">Loading…</div>
+  if (loading) return <Spinner />
 
   return (
     <div className="space-y-6">

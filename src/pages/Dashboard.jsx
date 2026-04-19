@@ -8,6 +8,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
 import { useAuth } from '../context/AuthContext'
+import Spinner from '../components/Spinner'
 
 const PIE_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4']
 
@@ -119,7 +120,7 @@ export default function Dashboard() {
     load()
   }
 
-  if (loading) return <div className="text-gray-400 mt-10 text-center">Loading…</div>
+  if (loading) return <Spinner />
 
   return (
     <div className="space-y-8">

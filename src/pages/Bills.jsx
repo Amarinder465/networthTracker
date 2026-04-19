@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import Spinner from '../components/Spinner'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatDate } from '../lib/format'
@@ -113,7 +114,7 @@ export default function Bills() {
         </div>
       )}
 
-      {loading ? <p className="text-gray-400">Loading…</p> : bills.length === 0 ? (
+      {loading ? <Spinner /> : bills.length === 0 ? (
         <div className="text-center text-gray-500 mt-20">
           <p className="text-4xl mb-3">🧾</p>
           <p className="text-lg font-medium">No bills yet</p>
