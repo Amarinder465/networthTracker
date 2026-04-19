@@ -13,7 +13,7 @@ const CAT_ICON = {
   Gas: '⛽', Parking: '🅿️', Transportation: '🚗',
   Activities: '🎯', Shopping: '🛍️', Other: '📦',
 }
-const TABS = ['People', 'Expenses', 'Summary']
+const TABS = ['People', 'Expenses', 'Summary', 'Overview']
 
 const EMPTY_EXPENSE = { description: '', category: 'Food', amount: '', involved: [] }
 
@@ -42,6 +42,12 @@ function calcSettlements(people, expenses, payer) {
   return { net, settlements }
 }
 
+function calcNights(start, end) {
+  if (!start || !end) return null
+  const diff = new Date(end + 'T00:00:00') - new Date(start + 'T00:00:00')
+  return Math.round(diff / (1000 * 60 * 60 * 24))
+}
+
 function fmt(date) {
   if (!date) return null
   return new Date(date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -66,6 +72,8 @@ export default function Trips() {
   const [editExpense, setEditExpense] = useState(null)
   const [saving, setSaving]       = useState(false)
   const [confirmTrip, setConfirmTrip]     = useState(null)
+  const [editingTrip, setEditingTrip]     = useState(null)
+  const [tripFormError, setTripFormError] = useState('')
   const [confirmExpense, setConfirmExpense] = useState(null)
   const [settled, setSettled]     = useState({})
   const [gearOpen, setGearOpen]   = useState(false)
@@ -101,9 +109,32 @@ export default function Trips() {
     return () => document.removeEventListener('click', close)
   }, [gearOpen])
 
+  function openEditTrip(trip) {
+    setTripForm({ name: trip.name, destination: trip.destination ?? '', start_date: trip.start_date ?? '', end_date: trip.end_date ?? '' })
+    setEditingTrip(trip.id)
+    setTripModal(true)
+  }
+
   async function createTrip() {
     if (!tripForm.name.trim()) return
+    if (tripForm.start_date && tripForm.end_date && tripForm.end_date < tripForm.start_date) {
+      setTripFormError('End date cannot be before start date.')
+      return
+    }
+    setTripFormError('')
     setSaving(true)
+    if (editingTrip) {
+      await supabase.from('split_events').update({
+        name: tripForm.name.trim(),
+        destination: tripForm.destination || null,
+        start_date: tripForm.start_date || null,
+        end_date: tripForm.end_date || null,
+      }).eq('id', editingTrip)
+      setSaving(false); setTripModal(false); setTripForm({ name: '', destination: '', start_date: '', end_date: '' }); setEditingTrip(null)
+      await loadTrips()
+      if (active?.id === editingTrip) setActive(prev => ({ ...prev, name: tripForm.name.trim(), destination: tripForm.destination || null, start_date: tripForm.start_date || null, end_date: tripForm.end_date || null }))
+      return
+    }
     const { data } = await supabase.from('split_events').insert({
       name: tripForm.name.trim(),
       destination: tripForm.destination || null,
@@ -294,7 +325,10 @@ export default function Trips() {
                       <p className="text-gray-600 text-xs mt-0.5">{new Date(trip.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                     )}
                   </div>
-                  <button onClick={e => { e.stopPropagation(); setConfirmTrip(trip) }} className="text-xs px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors ml-3">Delete</button>
+                  <div className="flex gap-1.5 ml-3 shrink-0">
+                    <button onClick={e => { e.stopPropagation(); openEditTrip(trip) }} className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors">Edit</button>
+                    <button onClick={e => { e.stopPropagation(); setConfirmTrip(trip) }} className="text-xs px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors">Delete</button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -554,9 +588,108 @@ export default function Trips() {
         </>
       )}
 
+          {/* Overview Tab */}
+          {tab === 'Overview' && active && (() => {
+            const nights = calcNights(active.start_date, active.end_date)
+            const costPerNight = nights > 0 ? total / nights : null
+            const costPerPersonPerNight = (nights > 0 && people.length > 0) ? total / nights / people.length : null
+            return (
+              <div className="space-y-4">
+                {/* Dates & nights */}
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-3">
+                  <h2 className="font-semibold text-sm">Trip Details</h2>
+                  {active.destination && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-400">Destination</span>
+                      <span className="text-white">📍 {active.destination}</span>
+                    </div>
+                  )}
+                  {active.start_date && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-400">Check-in</span>
+                      <span className="text-white">{fmt(active.start_date)}</span>
+                    </div>
+                  )}
+                  {active.end_date && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-400">Check-out</span>
+                      <span className="text-white">{fmt(active.end_date)}</span>
+                    </div>
+                  )}
+                  {nights !== null && nights >= 0 && (
+                    <div className="flex items-center justify-between text-sm border-t border-gray-800 pt-3">
+                      <span className="text-gray-400">Duration</span>
+                      <span className="text-white font-semibold">🌙 {nights} night{nights !== 1 ? 's' : ''}</span>
+                    </div>
+                  )}
+                  {people.length > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-400">Travellers</span>
+                      <span className="text-white">{people.length} {people.length === 1 ? 'person' : 'people'}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Cost breakdown */}
+                {expenses.length > 0 && (
+                  <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-3">
+                    <h2 className="font-semibold text-sm">Cost Breakdown</h2>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-400">Total spent</span>
+                      <span className="text-brand-400 font-semibold">{formatCurrency(total)}</span>
+                    </div>
+                    {people.length > 0 && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-400">Per person</span>
+                        <span className="text-white font-semibold">{formatCurrency(total / people.length)}</span>
+                      </div>
+                    )}
+                    {costPerNight !== null && (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-400">Per night</span>
+                        <span className="text-white font-semibold">{formatCurrency(costPerNight)}</span>
+                      </div>
+                    )}
+                    {costPerPersonPerNight !== null && (
+                      <div className="flex items-center justify-between text-sm border-t border-gray-800 pt-3">
+                        <span className="text-gray-400">Per person / per night</span>
+                        <span className="text-white font-semibold">{formatCurrency(costPerPersonPerNight)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Category breakdown */}
+                {Object.keys(byCategory).length > 0 && (
+                  <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                    <h2 className="px-5 py-3 border-b border-gray-800 font-semibold text-sm">By Category</h2>
+                    {Object.entries(byCategory).sort((a, b) => b[1] - a[1]).map(([cat, amt], i, arr) => (
+                      <div key={cat} className={`flex items-center justify-between px-5 py-3 ${i < arr.length - 1 ? 'border-b border-gray-800/60' : ''}`}>
+                        <div className="flex items-center gap-2 text-sm">
+                          <span>{CAT_ICON[cat] ?? '📦'}</span>
+                          <span className="text-gray-300">{cat}</span>
+                        </div>
+                        <div className="text-right text-sm">
+                          <span className="text-white font-medium">{formatCurrency(amt)}</span>
+                          <span className="text-gray-500 ml-2 text-xs">{Math.round((amt / total) * 100)}%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {expenses.length === 0 && (
+                  <p className="text-gray-500 text-sm text-center mt-6">Add expenses to see cost breakdown.</p>
+                )}
+              </div>
+            )
+          })()}
+        </>
+      )}
+
       {/* New Trip Modal */}
       {tripModal && (
-        <Modal title="New Trip" onClose={() => setTripModal(false)}>
+        <Modal title={editingTrip ? 'Edit Trip' : 'New Trip'} onClose={() => { setTripModal(false); setEditingTrip(null); setTripForm({ name: '', destination: '', start_date: '', end_date: '' }); setTripFormError('') }}>
           <div className="space-y-4">
             <Field label="Trip Name">
               <input value={tripForm.name} onChange={e => setTripForm(f => ({ ...f, name: e.target.value }))} onKeyDown={e => e.key === 'Enter' && createTrip()} placeholder="e.g. Vegas, Cancun 2025" />
@@ -569,12 +702,16 @@ export default function Trips() {
                 <input type="date" value={tripForm.start_date} onChange={e => setTripForm(f => ({ ...f, start_date: e.target.value }))} />
               </Field>
               <Field label="End Date">
-                <input type="date" value={tripForm.end_date} onChange={e => setTripForm(f => ({ ...f, end_date: e.target.value }))} />
+                <input type="date" value={tripForm.end_date} onChange={e => { setTripForm(f => ({ ...f, end_date: e.target.value })); setTripFormError('') }} />
               </Field>
+              {tripForm.start_date && tripForm.end_date && calcNights(tripForm.start_date, tripForm.end_date) >= 0 && (
+                <p className="text-xs text-brand-400 -mt-1">🌙 {calcNights(tripForm.start_date, tripForm.end_date)} night{calcNights(tripForm.start_date, tripForm.end_date) !== 1 ? 's' : ''}</p>
+              )}
+              {tripFormError && <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-xl px-3 py-2">{tripFormError}</p>}
             </div>
             <div className="flex gap-3 pt-1">
               <button onClick={() => setTripModal(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">Cancel</button>
-              <button onClick={createTrip} disabled={saving || !tripForm.name.trim()} className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">{saving ? 'Creating…' : 'Create Trip'}</button>
+              <button onClick={createTrip} disabled={saving || !tripForm.name.trim()} className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">{saving ? 'Saving…' : editingTrip ? 'Save Changes' : 'Create Trip'}</button>
             </div>
           </div>
         </Modal>

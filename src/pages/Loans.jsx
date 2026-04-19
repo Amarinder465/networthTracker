@@ -10,8 +10,22 @@ const CATEGORIES = ['Mortgage', 'Auto', 'Student', 'Personal', 'Credit Card', 'M
 
 const EMPTY = {
   name: '', lender: '', category: 'Personal', balance: '', original_balance: '',
-  interest_rate: '', min_payment: '', term_months: '', start_date: '', due_date: '', notes: '',
+  interest_rate: '', term_months: '', start_date: '', due_day: '', notes: '',
   pmi: '', property_tax: '', home_insurance: '', hoa: '',
+}
+
+function calcPI(originalBalance, annualRate, termMonths) {
+  const P = Number(originalBalance), r = Number(annualRate) / 100 / 12, n = Number(termMonths)
+  if (!P || !n) return 0
+  if (!r) return Math.round((P / n) * 100) / 100
+  return Math.round(P * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1) * 100) / 100
+}
+
+function calcInitialDueDate(startDate, dueDay) {
+  if (!startDate || !dueDay) return null
+  const start = new Date(startDate + 'T00:00:00')
+  const d = new Date(start.getFullYear(), start.getMonth() + 1, Number(dueDay))
+  return d.toISOString().split('T')[0]
 }
 const EMPTY_PAYMENT = { amount: '', note: '', payment_date: new Date().toISOString().split('T')[0] }
 
@@ -64,41 +78,44 @@ export default function Loans() {
 
   function openNew()   { setForm(EMPTY); setEditing(null); setUnlockDates(false); setModal(true) }
   function openEdit(l) {
+    const dueDay = l.due_date ? new Date(l.due_date + 'T00:00:00').getDate() : ''
     setForm({
       name: l.name, lender: l.lender ?? '', category: l.category,
       balance: l.balance, original_balance: l.original_balance ?? '',
-      interest_rate: l.interest_rate ?? '', min_payment: l.min_payment ?? '',
+      interest_rate: l.interest_rate ?? '',
       term_months: l.term_months ?? '', start_date: l.start_date ?? '',
-      due_date: l.due_date ?? '', notes: l.notes ?? '',
+      due_day: dueDay, notes: l.notes ?? '',
       pmi: l.pmi ?? '', property_tax: l.property_tax ?? '', home_insurance: l.home_insurance ?? '', hoa: l.hoa ?? '',
     })
     setEditing(l.id); setUnlockDates(false); setModal(true)
   }
 
   function openPay(l) {
-    // Pre-fill with full monthly payment (P&I + escrow) for display, but only P&I reduces balance
-    const total = Number(l.min_payment ?? 0) + Number(l.pmi ?? 0) + Number(l.property_tax ?? 0) + Number(l.home_insurance ?? 0) + Number(l.hoa ?? 0)
-    setPayModal(l)
-    setPayForm({ ...EMPTY_PAYMENT, amount: total || (l.min_payment ?? '') })
+    const pi    = l.min_payment ?? calcPI(l.original_balance, l.interest_rate, l.term_months)
+    const total = Number(pi) + Number(l.pmi ?? 0) + Number(l.property_tax ?? 0) + Number(l.home_insurance ?? 0) + Number(l.hoa ?? 0)
+    setPayModal({ ...l, min_payment: pi })
+    setPayForm({ ...EMPTY_PAYMENT, amount: total || pi })
   }
   async function openHist(l) { await loadPayments(l.id); setHistModal(l) }
 
   async function save() {
-    if (!form.name || !form.lender || !form.balance || !form.original_balance || !form.interest_rate || !form.min_payment || !form.term_months || (!editing && (!form.start_date || !form.due_date))) return
+    if (!form.name || !form.lender || !form.balance || !form.original_balance || !form.interest_rate || !form.term_months || (!editing && (!form.start_date || !form.due_day))) return
     setSaving(true)
+    const pi       = calcPI(form.original_balance, form.interest_rate, form.term_months)
+    const dueDate  = calcInitialDueDate(form.start_date, form.due_day)
     const payload = {
       name: form.name, lender: form.lender || null, category: form.category,
-      balance: Number(form.balance),
+      balance:          Number(form.balance),
       original_balance: form.original_balance ? Number(form.original_balance) : Number(form.balance),
-      interest_rate:  form.interest_rate  ? Number(form.interest_rate)  : null,
-      min_payment:    form.min_payment    ? Number(form.min_payment)    : null,
-      term_months:    form.term_months    ? Number(form.term_months)    : null,
-      pmi:            form.pmi            ? Number(form.pmi)            : null,
-      property_tax:   form.property_tax   ? Number(form.property_tax)   : null,
-      home_insurance: form.home_insurance ? Number(form.home_insurance) : null,
-      hoa:            form.hoa            ? Number(form.hoa)            : null,
+      interest_rate:    form.interest_rate  ? Number(form.interest_rate)  : null,
+      min_payment:      pi || null,
+      term_months:      form.term_months    ? Number(form.term_months)    : null,
+      pmi:              form.pmi            ? Number(form.pmi)            : null,
+      property_tax:     form.property_tax   ? Number(form.property_tax)   : null,
+      home_insurance:   form.home_insurance ? Number(form.home_insurance) : null,
+      hoa:              form.hoa            ? Number(form.hoa)            : null,
       notes: form.notes, user_id: user.id,
-      ...(!editing || unlockDates ? { start_date: form.start_date || null, due_date: form.due_date || null } : {}),
+      ...(!editing || unlockDates ? { start_date: form.start_date || null, due_date: dueDate } : {}),
     }
     if (editing) await supabase.from('loans').update(payload).eq('id', editing)
     else         await supabase.from('loans').insert(payload)
@@ -274,9 +291,13 @@ export default function Loans() {
             <Field label="Current Balance ($)" required><input required type="number" min="0" step="0.01" value={form.balance} onChange={e => setForm(f => ({ ...f, balance: e.target.value }))} placeholder="0.00" /></Field>
             <Field label="Original Balance ($)" required><input required type="number" min="0" step="0.01" value={form.original_balance} onChange={e => setForm(f => ({ ...f, original_balance: e.target.value }))} placeholder="0.00" /></Field>
             <Field label="Interest Rate %" required><input required type="number" min="0" step="0.001" value={form.interest_rate} onChange={e => setForm(f => ({ ...f, interest_rate: e.target.value }))} placeholder="e.g. 3.75" /></Field>
-            <Field label={isMortgage(form.category) ? "P&I Payment ($/mo) — principal & interest only" : "Min Monthly Payment ($)"} required>
-              <input required type="number" min="0" step="0.01" value={form.min_payment} onChange={e => setForm(f => ({ ...f, min_payment: e.target.value }))} placeholder="0.00" />
-            </Field>
+            <Field label="Term (months)" required><input required type="number" min="1" value={form.term_months} onChange={e => setForm(f => ({ ...f, term_months: e.target.value }))} placeholder="e.g. 360" /></Field>
+            {form.original_balance && form.interest_rate && form.term_months && (
+              <div className="bg-gray-800/60 border border-brand-600/30 rounded-xl px-4 py-3 text-sm flex justify-between items-center">
+                <span className="text-gray-400">{isMortgage(form.category) ? 'Calculated P&I payment' : 'Calculated monthly payment'}</span>
+                <span className="text-brand-400 font-semibold">{formatCurrency(calcPI(form.original_balance, form.interest_rate, form.term_months))}/mo</span>
+              </div>
+            )}
             {isMortgage(form.category) && (
               <>
                 <Field label="PMI ($/mo) (optional)"><input type="number" min="0" step="0.01" value={form.pmi} onChange={e => setForm(f => ({ ...f, pmi: e.target.value }))} placeholder="0.00" /></Field>
@@ -285,9 +306,8 @@ export default function Loans() {
                 <Field label="HOA ($/mo) (optional)"><input type="number" min="0" step="0.01" value={form.hoa} onChange={e => setForm(f => ({ ...f, hoa: e.target.value }))} placeholder="0.00" /></Field>
               </>
             )}
-            <Field label="Term (months)" required><input required type="number" min="1" value={form.term_months} onChange={e => setForm(f => ({ ...f, term_months: e.target.value }))} placeholder="e.g. 360" /></Field>
             {!editing && <Field label="Start Date" required><input required type="date" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} /></Field>}
-            {!editing && <Field label="First Due Date" required><input required type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} /></Field>}
+            {!editing && <Field label="Payment Due Day (1–31)" required><input required type="number" min="1" max="31" value={form.due_day} onChange={e => setForm(f => ({ ...f, due_day: e.target.value }))} placeholder="e.g. 1 for 1st of each month" /></Field>}
             {editing && (
               <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between">
@@ -300,12 +320,12 @@ export default function Loans() {
                   <div className="space-y-3 pt-1">
                     <p className="text-xs text-yellow-400">⚠️ Only change these if you made a mistake. Due date auto-updates after payments.</p>
                     <Field label="Start Date"><input type="date" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} /></Field>
-                    <Field label="Next Due Date"><input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} /></Field>
+                    <Field label="Payment Due Day (1–31)"><input type="number" min="1" max="31" value={form.due_day} onChange={e => setForm(f => ({ ...f, due_day: e.target.value }))} placeholder="e.g. 1" /></Field>
                   </div>
                 ) : (
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between"><span className="text-gray-400">Start Date</span><span>{formatDate(form.start_date) || '—'}</span></div>
-                    <div className="flex justify-between"><span className="text-gray-400">Next Due Date</span><span>{formatDate(form.due_date) || '—'}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Due Day</span><span>{form.due_day ? `${form.due_day}${['st','nd','rd'][((form.due_day % 10) - 1)] || 'th'} of each month` : '—'}</span></div>
                   </div>
                 )}
               </div>
