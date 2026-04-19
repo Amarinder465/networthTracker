@@ -9,11 +9,11 @@ import Loans from './pages/Loans'
 import TripCalculator from './pages/TripCalculator'
 
 const NAV = [
-  { to: '/',      label: 'Dashboard' },
-  { to: '/assets', label: 'Assets'   },
-  { to: '/bills',  label: 'Bills'    },
-  { to: '/loans',  label: 'Loans'    },
-  { to: '/trip',   label: 'Trip'     },
+  { to: '/',       label: 'Dashboard', icon: '📊' },
+  { to: '/assets', label: 'Assets',    icon: '🏦' },
+  { to: '/bills',  label: 'Bills',     icon: '🧾' },
+  { to: '/loans',  label: 'Loans',     icon: '📋' },
+  { to: '/trip',   label: 'Trip',      icon: '✈️' },
 ]
 
 function ProtectedRoute({ children }) {
@@ -31,10 +31,13 @@ function Layout() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center gap-8">
-        <span className="text-xl font-bold tracking-tight text-white">💰 Wealth Tracker</span>
-        <nav className="flex gap-1 flex-1">
+    <div className="min-h-screen flex flex-col bg-gray-950">
+      {/* Top header */}
+      <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
+        <span className="text-base font-bold tracking-tight text-white">💰 Wealth Tracker</span>
+
+        {/* Desktop nav */}
+        <nav className="hidden md:flex gap-1">
           {NAV.map(({ to, label }) => (
             <NavLink
               key={to}
@@ -50,17 +53,20 @@ function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="flex items-center gap-3">
-          <span className="text-gray-400 text-sm hidden sm:block">{user?.email}</span>
+
+        <div className="flex items-center gap-2">
+          <span className="text-gray-400 text-xs hidden sm:block truncate max-w-[140px]">{user?.email}</span>
           <button
             onClick={signOut}
-            className="text-gray-400 hover:text-white text-sm px-3 py-1.5 rounded-lg hover:bg-gray-800 transition-colors"
+            className="text-gray-400 hover:text-white text-xs px-2.5 py-1.5 rounded-lg hover:bg-gray-800 transition-colors whitespace-nowrap"
           >
             Sign Out
           </button>
         </div>
       </header>
-      <main className="flex-1 p-6 max-w-6xl mx-auto w-full">
+
+      {/* Page content */}
+      <main className="flex-1 p-4 md:p-6 max-w-6xl mx-auto w-full pb-24 md:pb-6">
         <Routes>
           <Route path="/"       element={<Dashboard />} />
           <Route path="/assets" element={<Assets />}    />
@@ -69,6 +75,25 @@ function Layout() {
           <Route path="/trip"   element={<TripCalculator />} />
         </Routes>
       </main>
+
+      {/* Mobile bottom tab bar */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-gray-900 border-t border-gray-800 flex">
+        {NAV.map(({ to, label, icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end={to === '/'}
+            className={({ isActive }) =>
+              `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-xs font-medium transition-colors ${
+                isActive ? 'text-brand-400' : 'text-gray-500'
+              }`
+            }
+          >
+            <span className="text-lg leading-none">{icon}</span>
+            <span>{label}</span>
+          </NavLink>
+        ))}
+      </nav>
     </div>
   )
 }
