@@ -13,7 +13,7 @@ import Account from './pages/Account'
 import SplitShare from './pages/SplitShare'
 
 const FREE_NAV = [
-  { to: '/',       label: 'Dashboard', icon: '📊' },
+  { to: '/',       label: 'Home', icon: '📊' },
   { to: '/assets', label: 'Assets',    icon: '🏦' },
   { to: '/bills',  label: 'Bills',     icon: '🧾' },
   { to: '/loans',  label: 'Loans',     icon: '📋' },
@@ -21,7 +21,7 @@ const FREE_NAV = [
 ]
 
 const PRO_NAV = [
-  { to: '/',       label: 'Dashboard', icon: '📊' },
+  { to: '/',       label: 'Home', icon: '📊' },
   { to: '/assets', label: 'Assets',    icon: '🏦' },
   { to: '/bills',  label: 'Bills',     icon: '🧾' },
   { to: '/loans',  label: 'Loans',     icon: '📋' },
@@ -121,7 +121,7 @@ function Layout() {
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-xs font-medium transition-colors ${
+              `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium transition-colors ${
                 locked ? 'text-gray-600' : isActive ? 'text-brand-400' : 'text-gray-500'
               }`
             }
@@ -134,7 +134,7 @@ function Layout() {
           <NavLink
             to="/admin"
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-xs font-medium transition-colors ${
+              `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium transition-colors ${
                 isActive ? 'text-brand-400' : 'text-gray-500'
               }`
             }
