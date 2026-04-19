@@ -24,8 +24,8 @@ export default function Assets() {
 
   useEffect(() => { load() }, [])
 
-  function openNew()    { setForm(EMPTY); setEditing(null); setModal(true) }
-  function openEdit(a)  { setForm({ name: a.name, category: a.category, value: a.value, notes: a.notes ?? '' }); setEditing(a.id); setModal(true) }
+  function openNew()   { setForm(EMPTY); setEditing(null); setModal(true) }
+  function openEdit(a) { setForm({ name: a.name, category: a.category, value: a.value, notes: a.notes ?? '' }); setEditing(a.id); setModal(true) }
 
   async function save() {
     if (!form.name || !form.value) return
@@ -50,7 +50,7 @@ export default function Assets() {
   const total = assets.reduce((s, a) => s + Number(a.value), 0)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Assets</h1>
@@ -66,36 +66,33 @@ export default function Assets() {
           <p className="text-sm mt-1">Add cash, investments, property, and more.</p>
         </div>
       ) : (
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-800 text-gray-400 text-left">
-                <th className="px-5 py-3 font-medium">Name</th>
-                <th className="px-5 py-3 font-medium">Category</th>
-                <th className="px-5 py-3 font-medium">Notes</th>
-                <th className="px-5 py-3 font-medium text-right">Value</th>
-                <th className="px-5 py-3 font-medium text-center">Net Worth</th>
-                <th className="px-5 py-3 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {assets.map(a => (
-                <tr key={a.id} className="border-b border-gray-800/60 hover:bg-gray-800/40 transition-colors">
-                  <td className="px-5 py-3 font-medium">{a.name}</td>
-                  <td className="px-5 py-3 text-gray-400">{a.category}</td>
-                  <td className="px-5 py-3 text-gray-500 max-w-[200px] truncate">{a.notes || '—'}</td>
-                  <td className="px-5 py-3 text-right text-brand-400 font-semibold">{formatCurrency(a.value)}</td>
-                  <td className="px-5 py-3 text-center">
-                    <input type="checkbox" checked={a.include_in_net_worth ?? true} onChange={() => toggleNetWorth(a)} className="w-4 h-4 accent-green-500 cursor-pointer" title="Include in net worth" />
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <button onClick={() => openEdit(a)} className="text-gray-400 hover:text-white mr-3 transition-colors">Edit</button>
-                    <button onClick={() => remove(a.id)} className="text-red-500 hover:text-red-400 transition-colors">Delete</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-3">
+          {assets.map(a => (
+            <div key={a.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold">{a.name}</span>
+                    <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">{a.category}</span>
+                  </div>
+                  {a.notes && <p className="text-gray-500 text-xs mt-1 truncate">{a.notes}</p>}
+                  <div className="flex items-center gap-3 mt-2">
+                    <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none">
+                      <input type="checkbox" checked={a.include_in_net_worth ?? true} onChange={() => toggleNetWorth(a)} className="w-3.5 h-3.5 accent-green-500 cursor-pointer" />
+                      Net Worth
+                    </label>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-lg font-bold text-brand-400">{formatCurrency(a.value)}</p>
+                  <div className="flex gap-3 mt-1 justify-end">
+                    <button onClick={() => openEdit(a)} className="text-gray-400 hover:text-white text-xs transition-colors">Edit</button>
+                    <button onClick={() => remove(a.id)} className="text-red-500 hover:text-red-400 text-xs transition-colors">Delete</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

@@ -189,8 +189,8 @@ export default function Loans() {
             const totalMonthlyPayment = Number(l.min_payment ?? 0) + escrow
             const mortgage    = isMortgage(l.category)
             return (
-              <div key={l.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-                <div className="flex items-start justify-between gap-4">
+              <div key={l.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-base">{l.name}</span>
@@ -206,7 +206,7 @@ export default function Loans() {
 
                     {/* Mortgage payment breakdown */}
                     {mortgage && (
-                      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 bg-gray-800/50 rounded-xl px-3 py-2">
+                      <div className="mt-3 grid grid-cols-2 sm:flex sm:flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 bg-gray-800/50 rounded-xl px-3 py-2">
                         {l.min_payment    && <span>P&I: <span className="text-white">{formatCurrency(l.min_payment)}</span></span>}
                         {l.pmi            && <span>PMI: <span className="text-white">{formatCurrency(l.pmi)}</span></span>}
                         {l.property_tax   && <span>Tax: <span className="text-white">{formatCurrency(l.property_tax)}</span></span>}
@@ -233,9 +233,9 @@ export default function Loans() {
                       </div>
                     )}
                   </div>
-                  <div className="text-right shrink-0">
+                  <div className="sm:text-right shrink-0">
                     <p className="text-xl font-bold text-red-400">{formatCurrency(l.balance)}</p>
-                    <div className="flex gap-2 mt-2 justify-end flex-wrap items-center">
+                    <div className="flex gap-2 mt-2 flex-wrap items-center sm:justify-end">
                       <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none" title="Include in net worth">
                         <input type="checkbox" checked={l.include_in_net_worth ?? true} onChange={() => toggleNetWorth(l)} className="w-3.5 h-3.5 accent-green-500 cursor-pointer" />
                         Net Worth

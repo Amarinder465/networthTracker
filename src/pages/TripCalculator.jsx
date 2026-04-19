@@ -142,7 +142,7 @@ export default function TripCalculator() {
             <p className="text-sm mt-1">Create a trip to start planning your budget.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {trips.map(t => (
               <div key={t.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 cursor-pointer hover:border-gray-600 transition-colors" onClick={() => setActive(t)}>
                 <div className="flex items-start justify-between">
@@ -169,7 +169,7 @@ export default function TripCalculator() {
         <>
           {/* Summary Cards */}
           {items.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <SummaryCard label="Total Budget" value={formatCurrency(totalBudget)} color="text-brand-400" />
               <SummaryCard label="Per Person" value={formatCurrency(totalBudget / travelers)} color="text-blue-400" />
               {hasActual && <SummaryCard label="Actual Spent" value={formatCurrency(totalActual)} color="text-yellow-400" />}
@@ -192,7 +192,8 @@ export default function TripCalculator() {
             </div>
           ) : (
             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[540px]">
                 <thead>
                   <tr className="border-b border-gray-800 text-gray-400 text-left">
                     <th className="px-5 py-3 font-medium">Category</th>
@@ -249,6 +250,7 @@ export default function TripCalculator() {
                   </tr>
                 </tfoot>
               </table>
+              </div>
             </div>
           )}
 

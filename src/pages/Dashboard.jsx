@@ -139,9 +139,9 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {showNoteInput && (
             <input
               value={snapNote}
@@ -163,17 +163,17 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard label="Net Worth" value={formatCurrency(netWorth)} color={netWorth >= 0 ? 'text-brand-500' : 'text-red-400'} />
         <StatCard label="Total Assets" value={formatCurrency(totalAssets)} color="text-blue-400" />
         <StatCard label="Total Debt" value={formatCurrency(totalDebt)} color="text-red-400" />
-        <StatCard label="Monthly Obligations" value={formatCurrency(monthlyBills)} sub="bills + loans (incl. escrow)" color="text-yellow-400" />
+        <StatCard label="Monthly Obligations" value={formatCurrency(monthlyBills)} sub="bills + loans" color="text-yellow-400" />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <StatCard label="True Monthly Cost" value={formatCurrency(monthlyBills)} sub="bills + loans (all-in)" color="text-orange-400" />
         <StatCard label="True Annual Cost" value={formatCurrency(yearlyBills)} sub="bills + loans × months left" color="text-orange-300" />
-        <StatCard label="Upcoming This Month" value={formatCurrency(upcomingTotal)} sub={`${upcomingCount} payments still due (bills + loans)`} color="text-red-400" />
+        <StatCard label="Upcoming This Month" value={formatCurrency(upcomingTotal)} sub={`${upcomingCount} due (bills + loans)`} color="text-red-400" />
       </div>
 
       <div className="space-y-2">
@@ -238,7 +238,8 @@ export default function Dashboard() {
       {history.length > 0 && (
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
           <h2 className="text-lg font-semibold px-5 py-4 border-b border-gray-800">Snapshot History</h2>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[500px]">
             <thead>
               <tr className="border-b border-gray-800 text-gray-400 text-left">
                 <th className="px-5 py-3 font-medium">Date</th>
@@ -264,6 +265,7 @@ export default function Dashboard() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

@@ -76,12 +76,12 @@ export default function Bills() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Bills</h1>
           <p className="text-gray-400 text-sm mt-0.5">{formatCurrency(monthlyTotal)}/mo · {formatCurrency(yearlyTotal)}/yr{catFilter !== 'All' ? ` — ${catFilter}` : ''}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           <select
             value={catFilter}
             onChange={e => setCatFilter(e.target.value)}
@@ -119,7 +119,8 @@ export default function Bills() {
         </div>
       ) : (
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[600px]">
             <thead>
               <tr className="border-b border-gray-800 text-gray-400 text-left">
                 <th className="px-5 py-3 font-medium">Name</th>
@@ -159,6 +160,7 @@ export default function Bills() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
