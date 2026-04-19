@@ -154,8 +154,8 @@ export default function Bills() {
                     </td>
                     <td className="px-5 py-3 text-right font-semibold text-yellow-400">{formatCurrency(b.amount)}</td>
                     <td className="px-5 py-3 text-right">
-                      <button onClick={() => openEdit(b)} className="text-gray-400 hover:text-white mr-3 transition-colors">Edit</button>
-                      <button onClick={() => setConfirmId(b.id)} className="text-red-500 hover:text-red-400 transition-colors">Delete</button>
+                      <button onClick={() => openEdit(b)} className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors mr-1.5">Edit</button>
+                      <button onClick={() => setConfirmId(b.id)} className="text-xs px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors">Delete</button>
                     </td>
                   </tr>
                 )

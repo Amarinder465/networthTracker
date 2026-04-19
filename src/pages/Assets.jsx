@@ -88,8 +88,8 @@ export default function Assets() {
                 <div className="text-right shrink-0">
                   <p className="text-lg font-bold text-brand-400">{formatCurrency(a.value)}</p>
                   <div className="flex gap-3 mt-1 justify-end">
-                    <button onClick={() => openEdit(a)} className="text-gray-400 hover:text-white text-xs transition-colors">Edit</button>
-                    <button onClick={() => setConfirmId(a.id)} className="text-red-500 hover:text-red-400 text-xs transition-colors">Delete</button>
+                    <button onClick={() => openEdit(a)} className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors">Edit</button>
+                    <button onClick={() => setConfirmId(a.id)} className="text-xs px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors">Delete</button>
                   </div>
                 </div>
               </div>

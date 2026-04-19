@@ -1,0 +1,613 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../context/AuthContext'
+import { formatCurrency } from '../lib/format'
+import Modal from '../components/Modal'
+import ConfirmModal from '../components/ConfirmModal'
+
+const CATEGORIES = ['Food', 'Drinks', 'Gas', 'Parking', 'Entertainment', 'Hotel', 'Activities', 'Other']
+const TABS = ['People', 'Expenses', 'Summary']
+
+const EMPTY_EXPENSE = { description: '', category: 'Food', amount: '', involved: [] }
+
+function calcSettlements(people, expenses, payer) {
+  const net = {}
+  people.forEach(p => { net[p.name] = 0 })
+
+  expenses.forEach(exp => {
+    if (!exp.involved.length) return
+    const share = Number(exp.amount) / exp.involved.length
+    net[payer] = (net[payer] ?? 0) + Number(exp.amount)
+    exp.involved.forEach(name => {
+      net[name] = (net[name] ?? 0) - share
+    })
+  })
+
+  const creditors = Object.entries(net).filter(([, b]) => b > 0.01).map(([name, amount]) => ({ name, amount })).sort((a, b) => b.amount - a.amount)
+  const debtors   = Object.entries(net).filter(([, b]) => b < -0.01).map(([name, amount]) => ({ name, amount: -amount })).sort((a, b) => b.amount - a.amount)
+
+  const settlements = []
+  let i = 0, j = 0
+  const c = creditors.map(x => ({ ...x }))
+  const d = debtors.map(x => ({ ...x }))
+
+  while (i < c.length && j < d.length) {
+    const amt = Math.min(c[i].amount, d[j].amount)
+    settlements.push({ from: d[j].name, to: c[i].name, amount: Math.round(amt * 100) / 100 })
+    c[i].amount -= amt
+    d[j].amount -= amt
+    if (c[i].amount < 0.01) i++
+    if (d[j].amount < 0.01) j++
+  }
+
+  return { net, settlements }
+}
+
+export default function SplitCalculator() {
+  const { user } = useAuth()
+  const [events, setEvents]       = useState([])
+  const [active, setActive]       = useState(null)
+  const [people, setPeople]       = useState([])
+  const [expenses, setExpenses]   = useState([])
+  const [payer, setPayer]         = useState('')
+  const [loading, setLoading]     = useState(true)
+  const [tab, setTab]             = useState('People')
+  const [eventModal, setEventModal] = useState(false)
+  const [expenseModal, setExpenseModal] = useState(false)
+  const [eventName, setEventName] = useState('')
+  const [newPerson, setNewPerson] = useState('')
+  const [expForm, setExpForm]     = useState(EMPTY_EXPENSE)
+  const [editExpense, setEditExpense] = useState(null)
+  const [saving, setSaving]       = useState(false)
+  const [confirmEvent, setConfirmEvent]   = useState(null)
+  const [confirmExpense, setConfirmExpense] = useState(null)
+  const [settled, setSettled]     = useState({})
+  const [gearOpen, setGearOpen]   = useState(false)
+  const [copying, setCopying]     = useState(false)
+  const [payerLocked, setPayerLocked] = useState(false)
+  const [lateAddedPeople, setLateAddedPeople] = useState([])
+
+  async function loadEvents() {
+    const { data } = await supabase.from('split_events').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+    setEvents(data ?? [])
+    setLoading(false)
+  }
+
+  async function loadEvent(ev) {
+    const [p, e] = await Promise.all([
+      supabase.from('split_people').select('*').eq('event_id', ev.id),
+      supabase.from('split_expenses').select('*').eq('event_id', ev.id).order('id', { ascending: true }),
+    ])
+    setPeople(p.data ?? [])
+    setExpenses(e.data ?? [])
+    setPayer(ev.payer ?? '')
+    setPayerLocked(!!(ev.payer))
+    setLateAddedPeople([])
+    setActive(ev)
+    setTab('People')
+    setSettled({})
+  }
+
+  useEffect(() => { loadEvents() }, [])
+
+  useEffect(() => {
+    if (!gearOpen) return
+    const close = () => setGearOpen(false)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [gearOpen])
+
+  async function createEvent() {
+    if (!eventName.trim()) return
+    setSaving(true)
+    const { data } = await supabase.from('split_events').insert({ name: eventName.trim(), user_id: user.id }).select().single()
+    setSaving(false); setEventModal(false); setEventName('')
+    if (data) { await loadEvents(); loadEvent(data) }
+  }
+
+  async function deleteEvent(ev) {
+    await supabase.from('split_events').delete().eq('id', ev.id)
+    setConfirmEvent(null)
+    if (active?.id === ev.id) { setActive(null); setPeople([]); setExpenses([]) }
+    loadEvents()
+  }
+
+  async function addPerson() {
+    if (!newPerson.trim() || !active) return
+    const exists = people.some(p => p.name.toLowerCase() === newPerson.trim().toLowerCase())
+    if (exists) return
+    const { data } = await supabase.from('split_people').insert({ event_id: active.id, user_id: user.id, name: newPerson.trim() }).select().single()
+    if (data) {
+      setPeople(prev => [...prev, data])
+      if (expenses.length > 0) setLateAddedPeople(prev => [...prev, data.name])
+    }
+    setNewPerson('')
+  }
+
+  async function removePerson(id) {
+    await supabase.from('split_people').delete().eq('id', id)
+    setPeople(prev => prev.filter(p => p.id !== id))
+  }
+
+  async function savePayer(name) {
+    setPayer(name)
+    await supabase.from('split_events').update({ payer: name }).eq('id', active.id)
+  }
+
+  async function generateLink() {
+    const token = crypto.randomUUID()
+    await supabase.from('split_events').update({ share_token: token }).eq('id', active.id)
+    setActive(prev => ({ ...prev, share_token: token }))
+    setGearOpen(false)
+    copyLink(token)
+  }
+
+  async function removeLink() {
+    await supabase.from('split_events').update({ share_token: null }).eq('id', active.id)
+    setActive(prev => ({ ...prev, share_token: null }))
+    setGearOpen(false)
+  }
+
+  async function copyLink(token) {
+    const url = `${window.location.origin}/split/share/${token}`
+    await navigator.clipboard.writeText(url)
+    setCopying(true)
+    setTimeout(() => setCopying(false), 2000)
+  }
+
+  function openNewExpense() {
+    setExpForm({ ...EMPTY_EXPENSE, involved: people.map(p => p.name) })
+    setEditExpense(null)
+    setExpenseModal(true)
+  }
+
+  function openEditExpense(exp) {
+    setExpForm({ description: exp.description, category: exp.category, amount: exp.amount, involved: exp.involved })
+    setEditExpense(exp)
+    setExpenseModal(true)
+  }
+
+  async function saveExpense() {
+    if (!expForm.description || !expForm.amount || !expForm.involved.length) return
+    setSaving(true)
+    const payload = {
+      event_id: active.id, user_id: user.id,
+      description: expForm.description,
+      category: expForm.category,
+      amount: Number(expForm.amount),
+      paid_by: payer,
+      involved: expForm.involved,
+    }
+    if (editExpense) await supabase.from('split_expenses').update(payload).eq('id', editExpense.id)
+    else             await supabase.from('split_expenses').insert(payload)
+    setSaving(false); setExpenseModal(false)
+    const { data } = await supabase.from('split_expenses').select('*').eq('event_id', active.id).order('id', { ascending: true })
+    setExpenses(data ?? [])
+  }
+
+  async function deleteExpense(id) {
+    await supabase.from('split_expenses').delete().eq('id', id)
+    setExpenses(prev => prev.filter(e => e.id !== id))
+    setConfirmExpense(null)
+  }
+
+  function toggleInvolved(name) {
+    setExpForm(f => ({
+      ...f,
+      involved: f.involved.includes(name) ? f.involved.filter(n => n !== name) : [...f.involved, name]
+    }))
+  }
+
+  const total = expenses.reduce((s, e) => s + Number(e.amount), 0)
+  const { net, settlements } = (active && payer) ? calcSettlements(people, expenses, payer) : { net: {}, settlements: [] }
+
+  const byCategory = expenses.reduce((acc, e) => {
+    acc[e.category] = (acc[e.category] ?? 0) + Number(e.amount)
+    return acc
+  }, {})
+
+  if (loading) return <div className="text-gray-400 mt-10 text-center">Loading…</div>
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          {active && (
+            <button onClick={() => { setActive(null); setPeople([]); setExpenses([]) }} className="text-gray-400 hover:text-white transition-colors text-sm">← Events</button>
+          )}
+          <h1 className="text-2xl font-bold">{active ? active.name : 'Split Calculator'}</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          {!active
+            ? <button onClick={() => setEventModal(true)} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">+ New Event</button>
+            : <>
+                {tab === 'Expenses' && people.length > 0 && payer && (
+                  <button onClick={openNewExpense} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">+ Add Expense</button>
+                )}
+                {/* Gear menu */}
+                <div className="relative">
+                  <button
+                    onClick={e => { e.stopPropagation(); setGearOpen(o => !o) }}
+                    className="px-3 py-2 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                  >
+                    Share
+                  </button>
+                  {gearOpen && (
+                    <div className="absolute right-0 top-10 bg-gray-900 border border-gray-700 rounded-xl shadow-xl w-52 z-50 overflow-hidden">
+                      {active.share_token ? (
+                        <>
+                          <button
+                            onClick={() => { copyLink(active.share_token); setGearOpen(false) }}
+                            className="w-full text-left px-4 py-3 text-sm text-white hover:bg-gray-800 transition-colors flex items-center gap-2"
+                          >
+                            <span>🔗</span> {copying ? 'Copied!' : 'Copy Share Link'}
+                          </button>
+                          <button
+                            onClick={generateLink}
+                            className="w-full text-left px-4 py-3 text-sm text-gray-300 hover:bg-gray-800 transition-colors flex items-center gap-2 border-t border-gray-800"
+                          >
+                            <span>🔄</span> Reset Link
+                          </button>
+                          <button
+                            onClick={removeLink}
+                            className="w-full text-left px-4 py-3 text-sm text-red-400 hover:bg-gray-800 transition-colors flex items-center gap-2 border-t border-gray-800"
+                          >
+                            <span>🗑️</span> Remove Link
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={generateLink}
+                          className="w-full text-left px-4 py-3 text-sm text-white hover:bg-gray-800 transition-colors flex items-center gap-2"
+                        >
+                          <span>🔗</span> Generate Share Link
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>
+          }
+        </div>
+      </div>
+
+      {/* Event List */}
+      {!active && (
+        events.length === 0 ? (
+          <div className="text-center text-gray-500 mt-20">
+            <p className="text-4xl mb-3">🧮</p>
+            <p className="text-lg font-medium">No split events yet</p>
+            <p className="text-sm mt-1">Create an event to start splitting expenses with friends.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {events.map(ev => (
+              <div key={ev.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 cursor-pointer hover:border-gray-600 transition-colors" onClick={() => loadEvent(ev)}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="font-semibold">{ev.name}</p>
+                    <p className="text-gray-500 text-xs mt-1">{new Date(ev.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                  </div>
+                  <button onClick={e => { e.stopPropagation(); setConfirmEvent(ev) }} className="text-red-500 hover:text-red-400 text-xs transition-colors">Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+
+      {/* Event Detail */}
+      {active && (
+        <>
+          {/* Tabs */}
+          <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1 w-fit">
+            {TABS.map(t => {
+              const locked = (t === 'Expenses' || t === 'Summary') && (!payer || people.length === 0)
+              return (
+                <button key={t}
+                  onClick={() => !locked && setTab(t)}
+                  disabled={locked}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    locked ? 'text-gray-600 cursor-not-allowed' :
+                    tab === t ? 'bg-brand-600 text-white' : 'text-gray-400 hover:text-white'
+                  }`}>
+                  {t}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* People Tab */}
+          {tab === 'People' && (
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                <input
+                  value={newPerson}
+                  onChange={e => setNewPerson(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addPerson()}
+                  placeholder="Add a person..."
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500"
+                />
+                <button onClick={addPerson} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">Add</button>
+              </div>
+
+              {people.length === 0 ? (
+                <p className="text-gray-500 text-sm text-center mt-6">Add people to get started.</p>
+              ) : (
+                <>
+                  <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                    {people.map((p, i) => (
+                      <div key={p.id} className={`flex items-center justify-between px-5 py-3 ${i < people.length - 1 ? 'border-b border-gray-800/60' : ''}`}>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-sm font-semibold">
+                            {p.name[0].toUpperCase()}
+                          </div>
+                          <span className="text-white text-sm">{p.name}</span>
+                        </div>
+                        <button onClick={() => removePerson(p.id)} className="text-red-500 hover:text-red-400 text-xs transition-colors">Remove</button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Card holder selector */}
+                  <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-white">Who used their card?</p>
+                        <p className="text-xs text-gray-500">All expenses will be assumed paid by this person.</p>
+                      </div>
+                      {payerLocked && payer && (
+                        <button
+                          onClick={() => setPayerLocked(false)}
+                          className="text-xs text-gray-400 hover:text-white transition-colors px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700"
+                        >
+                          Change
+                        </button>
+                      )}
+                    </div>
+
+                    {payerLocked && payer ? (
+                      <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-brand-500 bg-brand-500/10">
+                        <div className="w-6 h-6 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-xs font-semibold shrink-0">
+                          {payer[0].toUpperCase()}
+                        </div>
+                        <span className="text-white text-sm font-medium">{payer}</span>
+                        <span className="ml-auto text-brand-400 text-xs">💳 Locked</span>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        {people.map(p => (
+                          <button
+                            key={p.id}
+                            onClick={() => savePayer(p.name)}
+                            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
+                              payer === p.name
+                                ? 'border-brand-500 bg-brand-500/10 text-white'
+                                : 'border-gray-700 bg-gray-800 text-gray-400 hover:text-white hover:border-gray-600'
+                            }`}
+                          >
+                            <div className="w-6 h-6 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-xs font-semibold shrink-0">
+                              {p.name[0].toUpperCase()}
+                            </div>
+                            {p.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {payer && (
+                    <button onClick={() => { setPayerLocked(true); setTab('Expenses') }} className="w-full bg-brand-600 hover:bg-brand-700 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
+                      Next — Add Expenses →
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Expenses Tab */}
+          {tab === 'Expenses' && (
+            <div className="space-y-4">
+              {payer && (
+                <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5">
+                  <span>💳</span>
+                  <span>All expenses charged to <span className="text-white font-medium">{payer}</span></span>
+                </div>
+              )}
+              {lateAddedPeople.length > 0 && (
+                <div className="flex items-start gap-2 text-xs bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 rounded-xl px-4 py-3">
+                  <span className="mt-0.5">⚠️</span>
+                  <span><span className="font-medium">{lateAddedPeople.join(', ')}</span> {lateAddedPeople.length === 1 ? 'was' : 'were'} added after expenses existed. Review existing expenses to include {lateAddedPeople.length === 1 ? 'them' : 'them'}.</span>
+                </div>
+              )}
+
+              {/* Category totals */}
+              {Object.keys(byCategory).length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {Object.entries(byCategory).sort((a, b) => b[1] - a[1]).map(([cat, amt]) => (
+                    <div key={cat} className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+                      <p className="text-xs text-gray-400">{cat}</p>
+                      <p className="text-white font-semibold text-sm mt-0.5">{formatCurrency(amt)}</p>
+                    </div>
+                  ))}
+                  <div className="bg-gray-900 border border-brand-600/30 rounded-xl p-3">
+                    <p className="text-xs text-gray-400">Total</p>
+                    <p className="text-brand-400 font-semibold text-sm mt-0.5">{formatCurrency(total)}</p>
+                  </div>
+                </div>
+              )}
+
+              {!payer ? (
+                <p className="text-gray-500 text-sm text-center mt-6">Go to People tab and select who used their card first.</p>
+              ) : expenses.length === 0 ? (
+                <p className="text-gray-500 text-sm text-center mt-6">No expenses yet. Tap + Add Expense above.</p>
+              ) : (
+                <div className="space-y-2">
+                  {expenses.map(exp => (
+                    <div key={exp.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-sm">{exp.description}</span>
+                            <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">{exp.category}</span>
+                          </div>
+                          <p className="text-xs text-gray-600 mt-1">Split between: {exp.involved.join(', ')}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-bold text-white">{formatCurrency(exp.amount)}</p>
+                          <p className="text-xs text-gray-500">{formatCurrency(Number(exp.amount) / exp.involved.length)} each</p>
+                          <div className="flex gap-2 mt-1 justify-end">
+                            <button onClick={() => openEditExpense(exp)} className="text-gray-400 hover:text-white text-xs transition-colors">Edit</button>
+                            <button onClick={() => setConfirmExpense(exp.id)} className="text-red-500 hover:text-red-400 text-xs transition-colors">Delete</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Summary Tab */}
+          {tab === 'Summary' && (
+            <div className="space-y-4">
+              {expenses.length === 0 ? (
+                <p className="text-gray-500 text-sm text-center mt-6">Add expenses first to see the summary.</p>
+              ) : (
+                <>
+                  {/* Per person totals */}
+                  <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                    <h2 className="px-5 py-3 border-b border-gray-800 font-semibold text-sm">Per Person</h2>
+                    {people.map(p => {
+                      const owes    = expenses.reduce((s, e) => e.involved.includes(p.name) ? s + Number(e.amount) / e.involved.length : s, 0)
+                      const isPayer = p.name === payer
+                      const balance = isPayer ? total - owes : -owes
+                      return (
+                        <div key={p.id} className="flex items-center justify-between px-5 py-3 border-b border-gray-800/60 last:border-0">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-xs font-semibold">{p.name[0].toUpperCase()}</div>
+                            <span className="text-sm text-white">{p.name}</span>
+                            {isPayer && <span className="text-xs text-gray-500">💳</span>}
+                          </div>
+                          <div className="text-right text-xs">
+                            <p className="text-gray-400">Share: <span className="text-white">{formatCurrency(owes)}</span></p>
+                            <p className={`font-semibold mt-0.5 ${balance > 0.01 ? 'text-brand-400' : balance < -0.01 ? 'text-red-400' : 'text-gray-500'}`}>
+                              {balance > 0.01 ? `Gets back ${formatCurrency(balance)}` : balance < -0.01 ? `Owes ${formatCurrency(-balance)}` : 'Settled ✓'}
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Settlements */}
+                  {settlements.length === 0 ? (
+                    <div className="text-center text-brand-400 font-medium text-sm py-4">🎉 Everyone is settled!</div>
+                  ) : (
+                    <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                      <h2 className="px-5 py-3 border-b border-gray-800 font-semibold text-sm">Who Pays Who</h2>
+                      {settlements.map((s, i) => (
+                        <div key={i} className={`flex items-center justify-between px-5 py-3 border-b border-gray-800/60 last:border-0 ${settled[i] ? 'opacity-40' : ''}`}>
+                          <div className="text-sm">
+                            <span className="text-red-400 font-medium">{s.from}</span>
+                            <span className="text-gray-500 mx-2">→</span>
+                            <span className="text-brand-400 font-medium">{s.to}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-bold text-white">{formatCurrency(s.amount)}</span>
+                            <button
+                              onClick={() => setSettled(prev => ({ ...prev, [i]: !prev[i] }))}
+                              className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors ${settled[i] ? 'bg-brand-600/20 text-brand-400' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+                            >
+                              {settled[i] ? '✓ Settled' : 'Mark Settled'}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* New Event Modal */}
+      {eventModal && (
+        <Modal title="New Split Event" onClose={() => setEventModal(false)}>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">Event Name</label>
+              <input
+                value={eventName}
+                onChange={e => setEventName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && createEvent()}
+                placeholder="e.g. Vegas Trip, Birthday Dinner"
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500"
+              />
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => setEventModal(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">Cancel</button>
+              <button onClick={createEvent} disabled={saving || !eventName.trim()} className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">{saving ? 'Creating…' : 'Create'}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Add/Edit Expense Modal */}
+      {expenseModal && (
+        <Modal title={editExpense ? 'Edit Expense' : 'Add Expense'} onClose={() => setExpenseModal(false)}>
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+            <Field label="Description">
+              <input value={expForm.description} onChange={e => setExpForm(f => ({ ...f, description: e.target.value }))} placeholder="e.g. IHOP breakfast" />
+            </Field>
+            <Field label="Category">
+              <select value={expForm.category} onChange={e => setExpForm(f => ({ ...f, category: e.target.value }))}>
+                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </Field>
+            <Field label="Amount ($)">
+              <input type="number" min="0" step="0.01" value={expForm.amount} onChange={e => setExpForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
+            </Field>
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">Who was involved?</label>
+              <div className="grid grid-cols-2 gap-2">
+                {people.map(p => (
+                  <label key={p.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-colors text-sm ${expForm.involved.includes(p.name) ? 'border-brand-500 bg-brand-500/10 text-white' : 'border-gray-700 bg-gray-800 text-gray-400'}`}>
+                    <input type="checkbox" checked={expForm.involved.includes(p.name)} onChange={() => toggleInvolved(p.name)} className="accent-green-500" />
+                    {p.name}
+                  </label>
+                ))}
+              </div>
+              {expForm.involved.length > 0 && expForm.amount && (
+                <p className="text-xs text-gray-500 mt-2">
+                  {formatCurrency(Number(expForm.amount) / expForm.involved.length)} per person ({expForm.involved.length} people)
+                </p>
+              )}
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => setExpenseModal(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">Cancel</button>
+              <button onClick={saveExpense} disabled={saving || !expForm.description || !expForm.amount || !expForm.involved.length} className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">{saving ? 'Saving…' : 'Save'}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {confirmEvent && <ConfirmModal message={`Delete "${confirmEvent.name}"?`} onConfirm={() => deleteEvent(confirmEvent)} onCancel={() => setConfirmEvent(null)} />}
+      {confirmExpense && <ConfirmModal message="Delete this expense?" onConfirm={() => deleteExpense(confirmExpense)} onCancel={() => setConfirmExpense(null)} />}
+    </div>
+  )
+}
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="block text-sm text-gray-400 mb-1.5">{label}</label>
+      <children.type {...children.props} className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors" />
+    </div>
+  )
+}
