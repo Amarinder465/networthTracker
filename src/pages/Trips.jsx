@@ -585,9 +585,6 @@ export default function Trips() {
               )}
             </div>
           )}
-        </>
-      )}
-
           {/* Overview Tab */}
           {tab === 'Overview' && active && (() => {
             const nights = calcNights(active.start_date, active.end_date)
