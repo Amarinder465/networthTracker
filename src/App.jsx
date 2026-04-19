@@ -36,7 +36,7 @@ function ProtectedRoute({ children }) {
 }
 
 function Layout() {
-  const { user, isAdmin, isPro } = useAuth()
+  const { user, isAdmin, isPro, loading } = useAuth()
   const NAV = isPro ? PRO_NAV : FREE_NAV
 
 
@@ -106,8 +106,8 @@ function Layout() {
           <Route path="/assets" element={<Assets />}    />
           <Route path="/bills"  element={<Bills />}     />
           <Route path="/loans"  element={<Loans />}     />
-          <Route path="/trip"   element={isPro ? <Trips /> : <UpgradePrompt feature="Trips" />} />
-          <Route path="/admin"   element={isAdmin ? <Admin /> : <Navigate to="/" replace />} />
+          <Route path="/trip"   element={loading ? null : isPro ? <Trips /> : <UpgradePrompt feature="Trips" />} />
+          <Route path="/admin"   element={loading ? null : isAdmin ? <Admin /> : <Navigate to="/" replace />} />
           <Route path="/upgrade" element={<Upgrade />} />
           <Route path="/account" element={<Account />} />
         </Routes>

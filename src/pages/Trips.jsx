@@ -418,7 +418,7 @@ export default function Trips() {
                 {/* Total card */}
                 <div className="col-span-2 sm:col-span-1 bg-gray-900 border border-brand-600/40 rounded-2xl p-4 flex flex-col gap-1">
                   <p className="text-xs text-gray-400 uppercase tracking-wide">Total Spent</p>
-                  <p className="text-2xl font-bold text-brand-400">{formatCurrency(total)}</p>
+                  <p className="text-xl font-bold text-brand-400">{formatCurrency(total)}</p>
                   <p className="text-xs text-gray-500">💳 {payer}</p>
                 </div>
 
@@ -426,7 +426,7 @@ export default function Trips() {
                 {people.length > 0 && (
                   <div className="col-span-2 sm:col-span-1 bg-gray-900 border border-gray-800 rounded-2xl p-4 flex flex-col gap-1">
                     <p className="text-xs text-gray-400 uppercase tracking-wide">Per Person</p>
-                    <p className="text-2xl font-bold text-white">{formatCurrency(people.length > 0 ? total / people.length : 0)}</p>
+                    <p className="text-xl font-bold text-white">{formatCurrency(people.length > 0 ? total / people.length : 0)}</p>
                     <p className="text-xs text-gray-500">{people.length} people</p>
                   </div>
                 )}
