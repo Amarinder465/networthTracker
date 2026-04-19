@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency } from '../lib/format'
 import Modal from '../components/Modal'
+import ConfirmModal from '../components/ConfirmModal'
 
 const CATEGORIES = ['Flights', 'Hotel', 'Food', 'Activities', 'Transportation', 'Shopping', 'Misc']
 
@@ -22,6 +23,8 @@ export default function TripCalculator() {
   const [editTrip, setEditTrip] = useState(null)
   const [editItem, setEditItem] = useState(null)
   const [saving, setSaving]     = useState(false)
+  const [confirmTrip, setConfirmTrip] = useState(null)
+  const [confirmItem, setConfirmItem] = useState(null)
 
   async function loadTrips() {
     const { data } = await supabase.from('trips').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
@@ -64,9 +67,9 @@ export default function TripCalculator() {
   }
 
   async function deleteTrip(t) {
-    if (!confirm(`Delete trip "${t.name}"?`)) return
     await supabase.from('trips').delete().eq('id', t.id)
     if (active?.id === t.id) { setActive(null); setItems([]) }
+    setConfirmTrip(null)
     loadTrips()
   }
 
@@ -87,6 +90,7 @@ export default function TripCalculator() {
 
   async function deleteItem(id) {
     await supabase.from('trip_items').delete().eq('id', id)
+    setConfirmItem(null)
     loadItems(active.id)
   }
 
@@ -156,7 +160,7 @@ export default function TripCalculator() {
                     )}
                     <p className="text-gray-500 text-xs mt-1">{t.travelers} traveler{t.travelers !== 1 ? 's' : ''}</p>
                   </div>
-                  <button onClick={e => { e.stopPropagation(); deleteTrip(t) }} className="text-red-500 hover:text-red-400 text-xs transition-colors">Delete</button>
+                  <button onClick={e => { e.stopPropagation(); setConfirmTrip(t) }} className="text-red-500 hover:text-red-400 text-xs transition-colors">Delete</button>
                 </div>
               </div>
             ))}
@@ -231,7 +235,7 @@ export default function TripCalculator() {
                         </td>
                         <td className="px-5 py-3 text-right">
                           <button onClick={() => openEditItem(item)} className="text-gray-400 hover:text-white mr-3 transition-colors text-xs">Edit</button>
-                          <button onClick={() => deleteItem(item.id)} className="text-red-500 hover:text-red-400 transition-colors text-xs">Delete</button>
+                          <button onClick={() => setConfirmItem(item.id)} className="text-red-500 hover:text-red-400 transition-colors text-xs">Delete</button>
                         </td>
                       </tr>
                     )
@@ -274,6 +278,22 @@ export default function TripCalculator() {
             </div>
           )}
         </>
+      )}
+
+      {confirmTrip && (
+        <ConfirmModal
+          message={`Delete trip "${confirmTrip.name}"?`}
+          onConfirm={() => deleteTrip(confirmTrip)}
+          onCancel={() => setConfirmTrip(null)}
+        />
+      )}
+
+      {confirmItem && (
+        <ConfirmModal
+          message="Delete this expense?"
+          onConfirm={() => deleteItem(confirmItem)}
+          onCancel={() => setConfirmItem(null)}
+        />
       )}
 
       {/* Trip Modal */}

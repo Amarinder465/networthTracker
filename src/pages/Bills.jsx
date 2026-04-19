@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatDate } from '../lib/format'
 import Modal from '../components/Modal'
+import ConfirmModal from '../components/ConfirmModal'
 
 const CATEGORIES  = ['Housing', 'Utilities', 'Insurance', 'Subscriptions', 'Food', 'Transportation', 'Entertainment', 'Health', 'Other']
 const FREQUENCIES = ['monthly', 'yearly', 'weekly', 'one-time']
@@ -17,6 +18,7 @@ export default function Bills() {
   const [editing, setEditing] = useState(null)
   const [saving, setSaving]   = useState(false)
   const [testDate, setTestDate] = useState('')
+  const [confirmId, setConfirmId] = useState(null)
   const [catFilter, setCatFilter] = useState('All')
 
   async function load() {
@@ -40,8 +42,8 @@ export default function Bills() {
   }
 
   async function remove(id) {
-    if (!confirm('Delete this bill?')) return
     await supabase.from('bills').delete().eq('id', id)
+    setConfirmId(null)
     load()
   }
 
@@ -153,7 +155,7 @@ export default function Bills() {
                     <td className="px-5 py-3 text-right font-semibold text-yellow-400">{formatCurrency(b.amount)}</td>
                     <td className="px-5 py-3 text-right">
                       <button onClick={() => openEdit(b)} className="text-gray-400 hover:text-white mr-3 transition-colors">Edit</button>
-                      <button onClick={() => remove(b.id)} className="text-red-500 hover:text-red-400 transition-colors">Delete</button>
+                      <button onClick={() => setConfirmId(b.id)} className="text-red-500 hover:text-red-400 transition-colors">Delete</button>
                     </td>
                   </tr>
                 )
@@ -162,6 +164,14 @@ export default function Bills() {
           </table>
           </div>
         </div>
+      )}
+
+      {confirmId && (
+        <ConfirmModal
+          message="Delete this bill?"
+          onConfirm={() => remove(confirmId)}
+          onCancel={() => setConfirmId(null)}
+        />
       )}
 
       {modal && (

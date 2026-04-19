@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatCurrency, getNextDueDate } from '../lib/format'
 import StatCard from '../components/StatCard'
+import ConfirmModal from '../components/ConfirmModal'
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -26,6 +27,7 @@ export default function Dashboard() {
   const [showNoteInput, setShowNoteInput] = useState(false)
   const [testDate, setTestDate] = useState('')
   const [billFilter, setBillFilter] = useState('All')
+  const [confirmId, setConfirmId] = useState(null)
 
   async function load() {
     const [a, l, b, h] = await Promise.all([
@@ -112,8 +114,8 @@ export default function Dashboard() {
   }
 
   async function deleteSnapshot(id) {
-    if (!confirm('Delete this snapshot?')) return
     await supabase.from('net_worth_history').delete().eq('id', id)
+    setConfirmId(null)
     load()
   }
 
@@ -259,7 +261,7 @@ export default function Dashboard() {
                   <td className={`px-5 py-3 text-right font-semibold ${Number(h.net_worth) >= 0 ? 'text-brand-400' : 'text-red-400'}`}>{formatCurrency(h.net_worth)}</td>
                   <td className="px-5 py-3 text-gray-500">{h.note || '—'}</td>
                   <td className="px-5 py-3 text-right">
-                    <button onClick={() => deleteSnapshot(h.id)} className="text-red-500 hover:text-red-400 transition-colors">Delete</button>
+                    <button onClick={() => setConfirmId(h.id)} className="text-red-500 hover:text-red-400 transition-colors">Delete</button>
                   </td>
                 </tr>
               ))}
@@ -275,6 +277,14 @@ export default function Dashboard() {
           <p className="text-lg font-medium">Nothing tracked yet</p>
           <p className="text-sm mt-1">Add assets, bills, or loans to see your net worth.</p>
         </div>
+      )}
+
+      {confirmId && (
+        <ConfirmModal
+          message="Delete this snapshot?"
+          onConfirm={() => deleteSnapshot(confirmId)}
+          onCancel={() => setConfirmId(null)}
+        />
       )}
     </div>
   )

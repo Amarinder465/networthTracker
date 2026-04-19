@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatDate } from '../lib/format'
 import Modal from '../components/Modal'
+import ConfirmModal from '../components/ConfirmModal'
 
 const CATEGORIES = ['Mortgage', 'Auto', 'Student', 'Personal', 'Credit Card', 'Medical', 'Business', 'Other']
 
@@ -45,6 +46,7 @@ export default function Loans() {
   const [saving, setSaving]           = useState(false)
   const [savedMonths, setSavedMonths] = useState(null)
   const [unlockDates, setUnlockDates] = useState(false)
+  const [confirmId, setConfirmId] = useState(null)
 
   async function load() {
     const { data } = await supabase.from('loans').select('*').eq('user_id', user.id).order('balance', { ascending: false })
@@ -150,8 +152,8 @@ export default function Loans() {
   }
 
   async function remove(id) {
-    if (!confirm('Delete this loan?')) return
     await supabase.from('loans').delete().eq('id', id)
+    setConfirmId(null)
     load()
   }
 
@@ -243,7 +245,7 @@ export default function Loans() {
                       <button onClick={() => openPay(l)}  className="bg-brand-600 hover:bg-brand-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">💳 Pay</button>
                       <button onClick={() => openHist(l)} className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">History</button>
                       <button onClick={() => openEdit(l)} className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">Edit</button>
-                      <button onClick={() => remove(l.id)} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">Delete</button>
+                      <button onClick={() => setConfirmId(l.id)} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">Delete</button>
                     </div>
                   </div>
                 </div>
@@ -251,6 +253,14 @@ export default function Loans() {
             )
           })}
         </div>
+      )}
+
+      {confirmId && (
+        <ConfirmModal
+          message="Delete this loan?"
+          onConfirm={() => remove(confirmId)}
+          onCancel={() => setConfirmId(null)}
+        />
       )}
 
       {/* Add/Edit Loan Modal */}

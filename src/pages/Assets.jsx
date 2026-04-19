@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency } from '../lib/format'
 import Modal from '../components/Modal'
+import ConfirmModal from '../components/ConfirmModal'
 
 const CATEGORIES = ['Cash', 'Checking / Savings', 'Investment', 'Retirement', 'Real Estate', 'Vehicle', 'Crypto', 'Other']
 const EMPTY = { name: '', category: 'Cash', value: '', notes: '' }
@@ -15,6 +16,7 @@ export default function Assets() {
   const [form, setForm]       = useState(EMPTY)
   const [editing, setEditing] = useState(null)
   const [saving, setSaving]   = useState(false)
+  const [confirmId, setConfirmId] = useState(null)
 
   async function load() {
     const { data } = await supabase.from('assets').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
@@ -37,8 +39,8 @@ export default function Assets() {
   }
 
   async function remove(id) {
-    if (!confirm('Delete this asset?')) return
     await supabase.from('assets').delete().eq('id', id)
+    setConfirmId(null)
     load()
   }
 
@@ -87,13 +89,21 @@ export default function Assets() {
                   <p className="text-lg font-bold text-brand-400">{formatCurrency(a.value)}</p>
                   <div className="flex gap-3 mt-1 justify-end">
                     <button onClick={() => openEdit(a)} className="text-gray-400 hover:text-white text-xs transition-colors">Edit</button>
-                    <button onClick={() => remove(a.id)} className="text-red-500 hover:text-red-400 text-xs transition-colors">Delete</button>
+                    <button onClick={() => setConfirmId(a.id)} className="text-red-500 hover:text-red-400 text-xs transition-colors">Delete</button>
                   </div>
                 </div>
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {confirmId && (
+        <ConfirmModal
+          message="Delete this asset?"
+          onConfirm={() => remove(confirmId)}
+          onCancel={() => setConfirmId(null)}
+        />
       )}
 
       {modal && (
