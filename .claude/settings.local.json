@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create *)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files \\(x86\\)/**)",
+      "Read(//c/Users/amari/AppData/Local/Programs//**)",
+      "Bash(\"/c/Program Files/nodejs/npm.cmd\" --version)",
+      "Bash(\"/c/Program Files/nodejs/node.exe\" --version)",
+      "Bash(cmd.exe /c \"npm --version\")",
+      "Bash(cmd.exe /c \"npm --version && node --version\")",
+      "Bash(cmd.exe /c \"where npm 2>&1 && where node 2>&1\")",
+      "Bash(cmd.exe /c \"where npm > C:/tmp_node_check.txt 2>&1\")",
+      "Read(//c//**)",
+      "Bash(cmd.exe /c \"type C:\\\\\\\\tmp_node_check.txt\")",
+      "Bash(powershell.exe -Command \"Get-Command npm -ErrorAction SilentlyContinue | Select-Object Source; Get-Command node -ErrorAction SilentlyContinue | Select-Object Source\")",
+      "Read(//c/Users/amari/AppData/Roaming/**)",
+      "Read(//c/Users/amari/**)",
+      "Read(//c/ProgramData/**)",
+      "Bash(npm --version)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/nodejs:/c/Users/amari/AppData/Roaming/npm\")",
+      "Bash(npm install *)",
+      "Bash(npm run *)"
+    ]
+  }
+}
