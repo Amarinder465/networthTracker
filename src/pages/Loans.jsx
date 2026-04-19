@@ -36,13 +36,13 @@ function calcAmortization(balance, interestRate, piPayment) {
   return { interest, principal, newBalance: Math.max(balance - principal, 0) }
 }
 
-// Months remaining based on start date + original term (matches lender schedule)
+// Months remaining based on start date + original term (matches lender's schedule)
 function calcMonthsRemainingFromStart(startDate, termMonths) {
   if (!startDate || !termMonths) return null
   const start = new Date(startDate + 'T00:00:00')
   const now   = new Date()
-  const elapsed = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth())
-  return Math.max(termMonths - elapsed, 0)
+  const elapsed = Math.max((now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()), 0)
+  return Math.max(Number(termMonths) - elapsed, 0)
 }
 
 function isMortgage(category) { return category === 'Mortgage' }
@@ -131,15 +131,6 @@ export default function Loans() {
     const { interest, principal, newBalance } = calcAmortization(Number(payModal.balance), Number(payModal.interest_rate), piPayment)
 
     const oldMonths  = calcMonthsRemainingFromStart(payModal.start_date, payModal.term_months)
-    const newMonths  = oldMonths ? Math.max(oldMonths - 1, 0) : null
-    const monthsSaved = null // lump sum month savings handled separately below
-
-    let nextDueDate = null
-    if (payModal.due_date) {
-      const d = new Date(payModal.due_date + 'T00:00:00')
-      d.setMonth(d.getMonth() + 1)
-      nextDueDate = d.toISOString().split('T')[0]
-    }
 
     // If lump sum (paid more than P&I), extra principal reduces balance further
     const totalPaid   = Number(payForm.amount)
@@ -147,10 +138,8 @@ export default function Loans() {
     const extraPrincipal = Math.max(totalPaid - piPayment - escrow, 0)
     const finalBalance   = Math.max(newBalance - extraPrincipal, 0)
 
-    await supabase.from('loans').update({
-      balance: finalBalance,
-      ...(nextDueDate && { due_date: nextDueDate }),
-    }).eq('id', payModal.id)
+    // Pay Now never advances the due date — auto-deduct handles that on the scheduled date
+    await supabase.from('loans').update({ balance: finalBalance }).eq('id', payModal.id)
 
     await supabase.from('loan_payments').insert({
       user_id: user.id, loan_id: payModal.id,
@@ -162,9 +151,10 @@ export default function Loans() {
 
     setSaving(false); setPayModal(null)
     if (extraPrincipal > 0 && oldMonths) {
-      const actualNewMonths = calcMonthsRemainingFromStart(payModal.start_date, payModal.term_months)
-      const saved = oldMonths - (actualNewMonths ?? oldMonths)
-      if (saved > 0) setSavedMonths({ name: payModal.name, months: saved, newMonths: actualNewMonths })
+      const recalcPI = calcPI(finalBalance, payModal.interest_rate, oldMonths)
+      const origPI   = calcPI(Number(payModal.balance), payModal.interest_rate, oldMonths)
+      const saved    = Math.round((origPI - recalcPI) * 100) / 100
+      if (saved > 0) setSavedMonths({ name: payModal.name, savedPerMonth: saved, newMonths: oldMonths })
     }
     load()
   }
@@ -205,6 +195,7 @@ export default function Loans() {
           {loans.map(l => {
             const progress    = l.original_balance ? Math.round((1 - Number(l.balance) / Number(l.original_balance)) * 100) : null
             const monthsLeft  = calcMonthsRemainingFromStart(l.start_date, l.term_months)
+            const effectivePI = monthsLeft ? calcPI(l.balance, l.interest_rate, monthsLeft) : Number(l.min_payment ?? 0)
             const escrow      = Number(l.pmi ?? 0) + Number(l.property_tax ?? 0) + Number(l.home_insurance ?? 0) + Number(l.hoa ?? 0)
             const totalMonthlyPayment = Number(l.min_payment ?? 0) + escrow
             const mortgage    = isMortgage(l.category)
@@ -227,18 +218,18 @@ export default function Loans() {
                     {/* Mortgage payment breakdown */}
                     {mortgage && (
                       <div className="mt-3 grid grid-cols-2 sm:flex sm:flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 bg-gray-800/50 rounded-xl px-3 py-2">
-                        {l.min_payment    && <span>P&I: <span className="text-white">{formatCurrency(l.min_payment)}</span></span>}
+                        <span>P&I: <span className="text-white">{formatCurrency(effectivePI)}</span></span>
                         {l.pmi            && <span>PMI: <span className="text-white">{formatCurrency(l.pmi)}</span></span>}
                         {l.property_tax   && <span>Tax: <span className="text-white">{formatCurrency(l.property_tax)}</span></span>}
                         {l.home_insurance && <span>Insurance: <span className="text-white">{formatCurrency(l.home_insurance)}</span></span>}
                         {l.hoa            && <span>HOA: <span className="text-white">{formatCurrency(l.hoa)}</span></span>}
-                        <span className="text-yellow-400 font-medium">Total: {formatCurrency(totalMonthlyPayment)}/mo</span>
+                        <span className="text-yellow-400 font-medium">Total: {formatCurrency(effectivePI + Number(l.pmi ?? 0) + Number(l.property_tax ?? 0) + Number(l.home_insurance ?? 0) + Number(l.hoa ?? 0))}/mo</span>
                       </div>
                     )}
 
                     {/* Non-mortgage min payment */}
-                    {!mortgage && l.min_payment && (
-                      <div className="mt-1 text-sm text-gray-400">Min: {formatCurrency(l.min_payment)}/mo</div>
+                    {!mortgage && effectivePI > 0 && (
+                      <div className="mt-1 text-sm text-gray-400">Min: {formatCurrency(effectivePI)}/mo</div>
                     )}
 
                     {progress !== null && (
@@ -260,7 +251,7 @@ export default function Loans() {
                         <input type="checkbox" checked={l.include_in_net_worth ?? true} onChange={() => toggleNetWorth(l)} className="w-3.5 h-3.5 accent-green-500 cursor-pointer" />
                         Net Worth
                       </label>
-                      <button onClick={() => openPay(l)}  className="bg-brand-600 hover:bg-brand-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">💳 Pay</button>
+                      <button onClick={() => openPay(l)}  className="bg-brand-600 hover:bg-brand-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">💳 Pay Now</button>
                       <button onClick={() => openHist(l)} className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">History</button>
                       <button onClick={() => openEdit(l)} className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">Edit</button>
                       <button onClick={() => setConfirmId(l.id)} className="bg-red-500/10 hover:bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">Delete</button>
@@ -350,7 +341,7 @@ export default function Loans() {
         const extraPrincipal = payForm.amount ? Math.max(Number(payForm.amount) - piAmt - escrow, 0) : 0
         const finalBalance   = Math.max(newBalance - extraPrincipal, 0)
         return (
-          <Modal title={`Pay — ${payModal.name}`} onClose={() => setPayModal(null)}>
+          <Modal title={`Pay Now — ${payModal.name}`} onClose={() => setPayModal(null)}>
             <div className="space-y-4">
               <div className="bg-gray-800 rounded-xl p-4 text-sm space-y-1">
                 <div className="flex justify-between"><span className="text-gray-400">Current balance</span><span className="font-semibold">{formatCurrency(payModal.balance)}</span></div>
@@ -395,8 +386,8 @@ export default function Loans() {
         <div className="fixed bottom-6 right-6 z-50 bg-brand-600 text-white px-5 py-4 rounded-2xl shadow-2xl max-w-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="font-semibold">🎉 {savedMonths.months} month{savedMonths.months > 1 ? 's' : ''} ahead of schedule!</p>
-              <p className="text-sm text-brand-100 mt-0.5">{savedMonths.name} — {savedMonths.newMonths} months remaining</p>
+              <p className="font-semibold">🎉 Lump sum applied to {savedMonths.name}!</p>
+              <p className="text-sm text-brand-100 mt-0.5">Monthly payment reduced by {formatCurrency(savedMonths.savedPerMonth)}/mo over {savedMonths.newMonths} remaining months</p>
             </div>
             <button onClick={() => setSavedMonths(null)} className="text-brand-200 hover:text-white text-lg leading-none mt-0.5">✕</button>
           </div>

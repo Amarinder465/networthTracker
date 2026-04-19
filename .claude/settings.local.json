@@ -20,7 +20,12 @@
       "Bash(npm --version)",
       "Bash(export PATH=\"$PATH:/c/Program Files/nodejs:/c/Users/amari/AppData/Roaming/npm\")",
       "Bash(npm install *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(npx vite *)",
+      "Bash(node_modules/.bin/vite build *)",
+      "Bash(/c/Users/amari/AppData/Roaming/npm/node.exe node_modules/vite/bin/vite.js build)",
+      "Bash(cmd /c \"cd /d \\\\\"C:\\\\Users\\\\amari\\\\Desktop\\\\tracker app\\\\\" && npx vite build 2>&1\")",
+      "Bash(cmd /c \"cd /d \\\\\"C:\\\\Users\\\\amari\\\\Desktop\\\\tracker app\\\\\" && npx vite build\")"
     ]
   }
 }
