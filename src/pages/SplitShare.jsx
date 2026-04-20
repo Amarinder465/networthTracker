@@ -38,14 +38,16 @@ export default function SplitShare() {
   const [currentUserId, setCurrentUserId] = useState(null)
   const [claiming, setClaiming]   = useState(null)
   const [toggling, setToggling]   = useState(null)
+  const [debugError, setDebugError] = useState(null)
 
   async function load() {
-    const [{ data: result }, authRes] = await Promise.all([
+    const [rpcRes, authRes] = await Promise.all([
       supabase.rpc('get_shared_split', { p_token: token }),
       supabase.auth.getUser(),
     ])
-    if (!result) { setNotFound(true); setLoading(false); return }
-    setData(result)
+    if (rpcRes.error) { setDebugError(rpcRes.error.message); setNotFound(true); setLoading(false); return }
+    if (!rpcRes.data) { setNotFound(true); setLoading(false); return }
+    setData(rpcRes.data)
     setCurrentUserId(authRes?.data?.user?.id ?? null)
     setLoading(false)
   }
@@ -77,10 +79,14 @@ export default function SplitShare() {
       <p className="text-4xl mb-4">🔗</p>
       <p className="text-xl font-bold text-white">Link not found</p>
       <p className="text-gray-400 text-sm mt-2">This link may have been removed or reset.</p>
+      {debugError && <p className="text-red-400 text-xs mt-3 font-mono">{debugError}</p>}
     </div>
   )
 
-  const { event, people, expenses, claims } = data
+  const { event } = data
+  const people   = data.people   ?? []
+  const expenses = data.expenses ?? []
+  const claims   = data.claims   ?? []
   const payer      = event.payer ?? ''
   const isCreator  = currentUserId && currentUserId === event.creator_id
   const isNightOut = event.type === 'night_out'
