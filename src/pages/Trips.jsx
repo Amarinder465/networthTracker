@@ -78,6 +78,7 @@ export default function Trips() {
   const [settled, setSettled]     = useState({})
   const [gearOpen, setGearOpen]   = useState(false)
   const [copying, setCopying]     = useState(false)
+  const [view, setView]           = useState('active') // 'active' | 'archived'
 
   async function loadTrips() {
     const { data } = await supabase.from('split_events').select('*').eq('user_id', user.id).or('type.eq.trip,type.is.null').order('created_at', { ascending: false })
@@ -151,6 +152,11 @@ export default function Trips() {
     await supabase.from('split_events').delete().eq('id', trip.id)
     setConfirmTrip(null)
     if (active?.id === trip.id) { setActive(null); setPeople([]); setExpenses([]) }
+    loadTrips()
+  }
+
+  async function archiveTrip(trip, archived) {
+    await supabase.from('split_events').update({ archived }).eq('id', trip.id)
     loadTrips()
   }
 
@@ -261,7 +267,17 @@ export default function Trips() {
 
         <div className="flex items-center gap-2">
           {!active ? (
-            <button onClick={() => setTripModal(true)} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">+ New Trip</button>
+            <>
+              <button
+                onClick={() => setView(v => v === 'archived' ? 'active' : 'archived')}
+                className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${view === 'archived' ? 'bg-brand-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+              >
+                {view === 'archived' ? '← Active' : '🗃 Archived'}
+              </button>
+              {view !== 'archived' && (
+                <button onClick={() => setTripModal(true)} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">+ New Trip</button>
+              )}
+            </>
           ) : (
             <>
               {tab === 'Expenses' && people.length > 0 && payer && (
@@ -302,16 +318,17 @@ export default function Trips() {
       </div>
 
       {/* Trip List */}
-      {!active && (
-        trips.length === 0 ? (
+      {!active && (() => {
+        const filtered = trips.filter(t => view === 'archived' ? t.archived : !t.archived)
+        return filtered.length === 0 ? (
           <div className="text-center text-gray-500 mt-20">
-            <p className="text-4xl mb-3">✈️</p>
-            <p className="text-lg font-medium">No trips yet</p>
-            <p className="text-sm mt-1">Create a trip to start tracking and splitting expenses.</p>
+            <p className="text-4xl mb-3">{view === 'archived' ? '🗃' : '✈️'}</p>
+            <p className="text-lg font-medium">{view === 'archived' ? 'No archived trips' : 'No trips yet'}</p>
+            <p className="text-sm mt-1">{view === 'archived' ? 'Archived trips will appear here.' : 'Create a trip to start tracking and splitting expenses.'}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {trips.map(trip => (
+            {filtered.map(trip => (
               <div key={trip.id} onClick={() => loadTrip(trip)} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 cursor-pointer hover:border-gray-600 transition-colors">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
@@ -327,7 +344,10 @@ export default function Trips() {
                     )}
                   </div>
                   <div className="flex gap-1.5 ml-3 shrink-0">
-                    <button onClick={e => { e.stopPropagation(); openEditTrip(trip) }} className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors">Edit</button>
+                    {view !== 'archived' && <button onClick={e => { e.stopPropagation(); openEditTrip(trip) }} className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors">Edit</button>}
+                    <button onClick={e => { e.stopPropagation(); archiveTrip(trip, !trip.archived) }} className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors">
+                      {trip.archived ? 'Unarchive' : '🗃 Archive'}
+                    </button>
                     <button onClick={e => { e.stopPropagation(); setConfirmTrip(trip) }} className="text-xs px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors">Delete</button>
                   </div>
                 </div>
@@ -335,7 +355,7 @@ export default function Trips() {
             ))}
           </div>
         )
-      )}
+      })()}
 
       {/* Trip Detail */}
       {active && (

@@ -48,7 +48,7 @@ export default function SplitCheck() {
   const { user } = useAuth()
 
   // View state
-  const [view, setView]           = useState('list') // 'list' | 'received'
+  const [view, setView]           = useState('list') // 'list' | 'archived' | 'received'
   const [splits, setSplits]       = useState([])
   const [received, setReceived]   = useState([])
   const [loading, setLoading]     = useState(true)
@@ -131,6 +131,11 @@ export default function SplitCheck() {
     await supabase.from('split_events').delete().eq('id', id)
     setConfirmSplit(null)
     if (active?.id === id) setActive(null)
+    loadList()
+  }
+
+  async function archiveSplit(id, archived) {
+    await supabase.from('split_events').update({ archived }).eq('id', id)
     loadList()
   }
 
@@ -289,12 +294,18 @@ export default function SplitCheck() {
           {!active ? (
             <>
               <button
+                onClick={() => setView(v => v === 'archived' ? 'list' : 'archived')}
+                className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${view === 'archived' ? 'bg-brand-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+              >
+                {view === 'archived' ? '← Active' : '🗃 Archived'}
+              </button>
+              <button
                 onClick={() => setView(v => v === 'received' ? 'list' : 'received')}
                 className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${view === 'received' ? 'bg-brand-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
               >
                 {view === 'received' ? '← My Splits' : `Received${received.length > 0 ? ` (${received.length})` : ''}`}
               </button>
-              {view !== 'received' && (
+              {view === 'list' && (
                 <button onClick={() => setCreateModal(true)} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">+ New Split</button>
               )}
             </>
@@ -338,16 +349,17 @@ export default function SplitCheck() {
       </div>
 
       {/* ── SPLIT LIST ── */}
-      {!active && view === 'list' && (
-        splits.length === 0 ? (
+      {!active && (view === 'list' || view === 'archived') && (() => {
+        const filtered = splits.filter(s => view === 'archived' ? s.archived : !s.archived)
+        return filtered.length === 0 ? (
           <div className="text-center text-gray-500 mt-20">
-            <p className="text-4xl mb-3">🍽️</p>
-            <p className="text-lg font-medium">No splits yet</p>
-            <p className="text-sm mt-1">Create a split and share the link with your group.</p>
+            <p className="text-4xl mb-3">{view === 'archived' ? '🗃' : '🍽️'}</p>
+            <p className="text-lg font-medium">{view === 'archived' ? 'No archived splits' : 'No splits yet'}</p>
+            <p className="text-sm mt-1">{view === 'archived' ? 'Archived splits will appear here.' : 'Create a split and share the link with your group.'}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {splits.map(sp => (
+            {filtered.map(sp => (
               <div key={sp.id} onClick={() => loadSplit(sp)} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 cursor-pointer hover:border-gray-600 transition-colors">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
@@ -358,18 +370,26 @@ export default function SplitCheck() {
                     }
                     {sp.share_token && <p className="text-xs text-brand-400 mt-1">🔗 Link active</p>}
                   </div>
-                  <button
-                    onClick={e => { e.stopPropagation(); setConfirmSplit(sp) }}
-                    className="text-xs px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors ml-3 shrink-0"
-                  >
-                    Delete
-                  </button>
+                  <div className="flex gap-1.5 ml-3 shrink-0">
+                    <button
+                      onClick={e => { e.stopPropagation(); archiveSplit(sp.id, !sp.archived) }}
+                      className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+                    >
+                      {sp.archived ? 'Unarchive' : '🗃 Archive'}
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); setConfirmSplit(sp) }}
+                      className="text-xs px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )
-      )}
+      })()}
 
       {/* ── RECEIVED ── */}
       {!active && view === 'received' && (
