@@ -40,13 +40,13 @@ export default function SplitShare() {
   const [toggling, setToggling]   = useState(null)
 
   async function load() {
-    const [{ data: result }, { data: { user } }] = await Promise.all([
+    const [{ data: result }, authRes] = await Promise.all([
       supabase.rpc('get_shared_split', { p_token: token }),
       supabase.auth.getUser(),
     ])
     if (!result) { setNotFound(true); setLoading(false); return }
     setData(result)
-    setCurrentUserId(user?.id ?? null)
+    setCurrentUserId(authRes?.data?.user?.id ?? null)
     setLoading(false)
   }
 
