@@ -103,9 +103,9 @@ export default function SplitShare() {
       <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between sticky top-0">
         <span className="text-base font-bold tracking-tight">💰 Wealth Tracker</span>
         {!currentUserId ? (
-          <a href="/" className="bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors">Sign in to claim your share</a>
+          <a href={`/auth?redirect=/split/share/${token}`} className="bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors">Sign in to claim your share</a>
         ) : (
-          <a href="/" className="text-xs text-brand-400 hover:text-brand-300 transition-colors">Get the app →</a>
+          <a href="/" className="text-xs text-gray-400 hover:text-white transition-colors">← Dashboard</a>
         )}
       </header>
 
