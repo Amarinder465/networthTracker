@@ -80,7 +80,7 @@ export default function Trips() {
   const [copying, setCopying]     = useState(false)
 
   async function loadTrips() {
-    const { data } = await supabase.from('split_events').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+    const { data } = await supabase.from('split_events').select('*').eq('user_id', user.id).or('type.eq.trip,type.is.null').order('created_at', { ascending: false })
     setTrips(data ?? [])
     setLoading(false)
   }
@@ -140,6 +140,7 @@ export default function Trips() {
       destination: tripForm.destination || null,
       start_date: tripForm.start_date || null,
       end_date: tripForm.end_date || null,
+      type: 'trip',
       user_id: user.id,
     }).select().single()
     setSaving(false); setTripModal(false); setTripForm({ name: '', destination: '', start_date: '', end_date: '' })

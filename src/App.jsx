@@ -7,25 +7,28 @@ import Assets from './pages/Assets'
 import Bills from './pages/Bills'
 import Loans from './pages/Loans'
 import Trips from './pages/Trips'
+import SplitCheck from './pages/SplitCheck'
 import Admin from './pages/Admin'
 import Upgrade from './pages/Upgrade'
 import Account from './pages/Account'
 import SplitShare from './pages/SplitShare'
 
 const FREE_NAV = [
-  { to: '/',       label: 'Home', icon: '📊' },
-  { to: '/assets', label: 'Assets',    icon: '🏦' },
-  { to: '/bills',  label: 'Bills',     icon: '🧾' },
-  { to: '/loans',  label: 'Loans',     icon: '📋' },
-  { to: '/trip',   label: 'Trips',     icon: '✈️', locked: true },
+  { to: '/',       label: 'Home',   icon: '📊' },
+  { to: '/assets', label: 'Assets', icon: '🏦' },
+  { to: '/bills',  label: 'Bills',  icon: '🧾' },
+  { to: '/loans',  label: 'Loans',  icon: '📋' },
+  { to: '/trip',   label: 'Trips',  icon: '✈️', locked: true },
+  { to: '/split',  label: 'Split',  icon: '🍽️', locked: true },
 ]
 
 const PRO_NAV = [
-  { to: '/',       label: 'Home', icon: '📊' },
-  { to: '/assets', label: 'Assets',    icon: '🏦' },
-  { to: '/bills',  label: 'Bills',     icon: '🧾' },
-  { to: '/loans',  label: 'Loans',     icon: '📋' },
-  { to: '/trip',   label: 'Trips',     icon: '✈️' },
+  { to: '/',       label: 'Home',   icon: '📊' },
+  { to: '/assets', label: 'Assets', icon: '🏦' },
+  { to: '/bills',  label: 'Bills',  icon: '🧾' },
+  { to: '/loans',  label: 'Loans',  icon: '📋' },
+  { to: '/trip',   label: 'Trips',  icon: '✈️' },
+  { to: '/split',  label: 'Split',  icon: '🍽️' },
 ]
 
 function ProtectedRoute({ children }) {
@@ -106,7 +109,8 @@ function Layout() {
           <Route path="/assets" element={<Assets />}    />
           <Route path="/bills"  element={<Bills />}     />
           <Route path="/loans"  element={<Loans />}     />
-          <Route path="/trip"   element={loading ? null : isPro ? <Trips /> : <UpgradePrompt feature="Trips" />} />
+          <Route path="/trip"   element={loading ? null : isPro ? <Trips />      : <UpgradePrompt feature="Trips" />} />
+          <Route path="/split"  element={loading ? null : isPro ? <SplitCheck /> : <UpgradePrompt feature="Split the Bill" />} />
           <Route path="/admin"   element={loading ? null : isAdmin ? <Admin /> : <Navigate to="/" replace />} />
           <Route path="/upgrade" element={<Upgrade />} />
           <Route path="/account" element={<Account />} />
