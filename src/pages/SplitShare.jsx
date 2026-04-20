@@ -105,7 +105,7 @@ export default function SplitShare() {
         <a href="/" className="text-xs text-brand-400 hover:text-brand-300 transition-colors">Get the app →</a>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+      <main className="max-w-2xl mx-auto px-4 py-6 space-y-4">
         {/* Event header */}
         <div>
           <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{isNightOut ? 'Split the Bill' : 'Shared Expenses'}</p>
@@ -128,14 +128,14 @@ export default function SplitShare() {
         {/* ── NIGHT OUT VIEW ── */}
         {isNightOut && (
           <>
-            {/* Settlements with paid toggles */}
+            {/* Who pays who */}
             {settlements.length === 0 && expenses.length > 0 ? (
               <div className="text-center text-brand-400 font-medium py-6">🎉 Everyone is settled!</div>
             ) : settlements.length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
                 <h2 className="px-5 py-3 border-b border-gray-800 font-semibold text-sm">Who Pays Who</h2>
                 {settlements.map((s, i) => {
-                  const person = people.find(p => p.name === s.from)
+                  const person     = people.find(p => p.name === s.from)
                   const isClaimed  = claimedPersonIds.includes(person?.id)
                   const isMyPerson = myClaimedPersonId === person?.id
                   const canClaim   = currentUserId && !isCreator && !myClaimedPersonId && person && !isClaimed
@@ -183,10 +183,56 @@ export default function SplitShare() {
               </div>
             )}
 
+            {/* What Was Spent */}
+            {expenses.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                <h2 className="px-5 py-3 border-b border-gray-800 font-semibold text-sm">What Was Spent</h2>
+                {expenses.map((exp, i) => (
+                  <div key={exp.id} className={`flex items-center justify-between px-5 py-3 gap-3 ${i < expenses.length - 1 ? 'border-b border-gray-800/60' : ''}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white">{exp.description}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        💳 {exp.paid_by} · split {exp.involved?.length ?? 1} ways
+                        {exp.involved?.length > 0 && <span className="text-gray-600"> ({(exp.involved ?? []).join(', ')})</span>}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-bold text-sm text-white">{formatCurrency(exp.amount)}</p>
+                      <p className="text-xs text-gray-500">{formatCurrency(Number(exp.amount) / (exp.involved?.length ?? 1))} each</p>
+                    </div>
+                  </div>
+                ))}
+                <div className="px-5 py-3 border-t border-gray-800 flex justify-between items-center">
+                  <span className="text-xs text-gray-400">Total</span>
+                  <span className="font-bold text-brand-400">{formatCurrency(total)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Who Paid */}
+            {people.filter(p => expenses.some(e => e.paid_by === p.name)).length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                <h2 className="px-5 py-3 border-b border-gray-800 font-semibold text-sm">Who Paid</h2>
+                {people.filter(p => expenses.some(e => e.paid_by === p.name)).map((p, i, arr) => {
+                  const paid = expenses.reduce((s, e) => e.paid_by === p.name ? s + Number(e.amount) : s, 0)
+                  return (
+                    <div key={p.id} className={`flex items-center justify-between px-5 py-3 ${i < arr.length - 1 ? 'border-b border-gray-800/60' : ''}`}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-xs font-semibold">{p.name[0].toUpperCase()}</div>
+                        <span className="text-sm text-white">{p.name}</span>
+                      </div>
+                      <span className="text-sm font-semibold text-brand-400">💳 {formatCurrency(paid)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
             {!currentUserId && (
-              <p className="text-center text-xs text-gray-500">
-                <a href="/" className="text-brand-400 hover:text-brand-300">Sign in</a> to claim your share and track it in your account.
-              </p>
+              <div className="text-center space-y-2 py-2">
+                <p className="text-sm text-gray-400">Claim your name to track this in your account.</p>
+                <a href="/" className="inline-block bg-brand-600 hover:bg-brand-700 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors">Sign in to claim your share</a>
+              </div>
             )}
           </>
         )}
