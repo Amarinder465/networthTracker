@@ -102,7 +102,11 @@ export default function SplitShare() {
     <div className="min-h-screen bg-gray-950 text-white">
       <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between sticky top-0">
         <span className="text-base font-bold tracking-tight">💰 Wealth Tracker</span>
-        <a href="/" className="text-xs text-brand-400 hover:text-brand-300 transition-colors">Get the app →</a>
+        {!currentUserId ? (
+          <a href="/" className="bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors">Sign in to claim your share</a>
+        ) : (
+          <a href="/" className="text-xs text-brand-400 hover:text-brand-300 transition-colors">Get the app →</a>
+        )}
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-6 space-y-4">
@@ -228,12 +232,6 @@ export default function SplitShare() {
               </div>
             )}
 
-            {!currentUserId && (
-              <div className="text-center space-y-2 py-2">
-                <p className="text-sm text-gray-400">Claim your name to track this in your account.</p>
-                <a href="/" className="inline-block bg-brand-600 hover:bg-brand-700 text-white px-6 py-2.5 rounded-xl text-sm font-semibold transition-colors">Sign in to claim your share</a>
-              </div>
-            )}
           </>
         )}
 
