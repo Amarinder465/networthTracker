@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatCurrency, getNextDueDate } from '../lib/format'
+import { processLoanAutoPay } from '../lib/loans'
 import StatCard from '../components/StatCard'
 import ConfirmModal from '../components/ConfirmModal'
 import {
@@ -37,8 +38,19 @@ export default function Dashboard() {
       supabase.from('bills').select('*').eq('user_id', user.id),
       supabase.from('net_worth_history').select('*').eq('user_id', user.id).order('snapshot_date', { ascending: true }),
     ])
+    const loanRows = l.data ?? []
+
+    // Auto-pay any overdue loan cycles, using REAL today (testDate on this
+    // page is display-only — explicit auto-pay testing happens on /loans).
+    const { totalCycles } = await processLoanAutoPay(loanRows, new Date())
+    let finalLoans = loanRows
+    if (totalCycles > 0) {
+      const { data: refreshed } = await supabase.from('loans').select('*').eq('user_id', user.id)
+      finalLoans = refreshed ?? []
+    }
+
     setAssets(a.data ?? [])
-    setLoans(l.data  ?? [])
+    setLoans(finalLoans)
     setBills(b.data  ?? [])
     setHistory(h.data ?? [])
     setLoading(false)

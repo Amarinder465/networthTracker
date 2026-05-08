@@ -3,6 +3,7 @@ import Spinner from '../components/Spinner'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatDate } from '../lib/format'
+import { processLoanAutoPay } from '../lib/loans'
 import Modal from '../components/Modal'
 import ConfirmModal from '../components/ConfirmModal'
 
@@ -62,11 +63,34 @@ export default function Loans() {
   const [savedMonths, setSavedMonths] = useState(null)
   const [unlockDates, setUnlockDates] = useState(false)
   const [confirmId, setConfirmId] = useState(null)
+  const [testDate, setTestDate]   = useState('')
+  const [autoPaid, setAutoPaid]   = useState(null)
+  const [autoPaying, setAutoPaying] = useState(false)
 
-  async function load() {
+  async function load(refDate) {
     const { data } = await supabase.from('loans').select('*').eq('user_id', user.id).order('balance', { ascending: false })
-    setLoans(data ?? [])
+    const fetched = data ?? []
+
+    // Auto-pay any loans whose due_date has passed.
+    const today = refDate ?? new Date()
+    setAutoPaying(true)
+    const { processedByLoan, totalCycles } = await processLoanAutoPay(fetched, today)
+    setAutoPaying(false)
+
+    if (totalCycles > 0) {
+      // Re-fetch since balances/due_dates moved.
+      const { data: refreshed } = await supabase.from('loans').select('*').eq('user_id', user.id).order('balance', { ascending: false })
+      setLoans(refreshed ?? [])
+      setAutoPaid({ totalCycles, loanCount: Object.keys(processedByLoan).length })
+    } else {
+      setLoans(fetched)
+    }
     setLoading(false)
+  }
+
+  async function runAutoPayForTestDate() {
+    if (!testDate) return
+    await load(new Date(testDate + 'T00:00:00'))
   }
 
   async function loadPayments(loanId) {
@@ -99,7 +123,7 @@ export default function Loans() {
   async function openHist(l) { await loadPayments(l.id); setHistModal(l) }
 
   async function save() {
-    if (!form.name || !form.lender || !form.balance || !form.original_balance || !form.interest_rate || !form.term_months || (!editing && (!form.start_date || !form.due_day))) return
+    if (!form.name || !form.balance || !form.original_balance || !form.interest_rate || !form.term_months || (!editing && (!form.start_date || !form.due_day))) return
     setSaving(true)
     const pi       = calcPI(form.original_balance, form.interest_rate, form.term_months)
     const dueDate  = calcInitialDueDate(form.start_date, form.due_day)
@@ -183,6 +207,33 @@ export default function Loans() {
         </div>
         <button onClick={openNew} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">+ Add Loan</button>
       </div>
+
+      {import.meta.env.DEV && (
+        <div className="flex flex-wrap items-center gap-3 bg-yellow-400/10 border border-yellow-400/30 rounded-xl px-4 py-2.5 text-sm">
+          <span className="text-yellow-400 font-medium">🧪 Test Mode</span>
+          <span className="text-gray-400">Simulate date:</span>
+          <input
+            type="date"
+            value={testDate}
+            onChange={e => setTestDate(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-yellow-400"
+          />
+          <button
+            onClick={runAutoPayForTestDate}
+            disabled={!testDate || autoPaying}
+            className="bg-yellow-400/20 hover:bg-yellow-400/30 disabled:opacity-40 text-yellow-300 px-3 py-1 rounded-lg text-xs font-medium transition-colors"
+            title="Runs auto-pay for any loans whose due date is before the simulated date. Writes to the database."
+          >
+            {autoPaying ? 'Running…' : 'Run auto-pay through this date'}
+          </button>
+          {testDate && (
+            <button onClick={() => setTestDate('')} className="text-yellow-400 hover:text-yellow-300 text-xs transition-colors">
+              Reset
+            </button>
+          )}
+          <span className="text-gray-500 text-xs ml-auto">⚠ Writes payments + advances due dates in the DB</span>
+        </div>
+      )}
 
       {loading ? <Spinner /> : loans.length === 0 ? (
         <div className="text-center text-gray-500 mt-20">
@@ -277,12 +328,29 @@ export default function Loans() {
         <Modal title={editing ? 'Edit Loan' : 'Add Loan'} onClose={() => setModal(false)}>
           <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
             <Field label="Name" required><input required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Car Loan" /></Field>
-            <Field label="Lender" required><input required value={form.lender} onChange={e => setForm(f => ({ ...f, lender: e.target.value }))} placeholder="e.g. Wells Fargo" /></Field>
-            <Field label="Category" required><select required value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>{CATEGORIES.map(c => <option key={c}>{c}</option>)}</select></Field>
-            <Field label="Current Balance ($)" required><input required type="number" min="0" step="0.01" value={form.balance} onChange={e => setForm(f => ({ ...f, balance: e.target.value }))} placeholder="0.00" /></Field>
-            <Field label="Original Balance ($)" required><input required type="number" min="0" step="0.01" value={form.original_balance} onChange={e => setForm(f => ({ ...f, original_balance: e.target.value }))} placeholder="0.00" /></Field>
+            <Field label="Current Balance ($)" required>
+              <input
+                required type="number" min="0" step="0.01" value={form.balance}
+                onChange={e => setForm(f => {
+                  const v = e.target.value
+                  // Mirror current balance into original_balance until user edits it manually.
+                  const inSync = !f.original_balance || f.original_balance === f.balance
+                  return { ...f, balance: v, original_balance: inSync ? v : f.original_balance }
+                })}
+                placeholder="0.00"
+              />
+            </Field>
+            <Field label="Original Balance ($)" required>
+              <input
+                required type="number" min="0" step="0.01" value={form.original_balance}
+                onChange={e => setForm(f => ({ ...f, original_balance: e.target.value }))}
+                placeholder="What you originally borrowed"
+              />
+            </Field>
+            <p className="text-xs text-gray-500 -mt-2">For brand-new loans this auto-fills from Current Balance. Edit it if your loan is already mid-payment.</p>
             <Field label="Interest Rate %" required><input required type="number" min="0" step="0.001" value={form.interest_rate} onChange={e => setForm(f => ({ ...f, interest_rate: e.target.value }))} placeholder="e.g. 3.75" /></Field>
             <Field label="Term (months)" required><input required type="number" min="1" value={form.term_months} onChange={e => setForm(f => ({ ...f, term_months: e.target.value }))} placeholder="e.g. 360" /></Field>
+            <Field label="Category"><select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>{CATEGORIES.map(c => <option key={c}>{c}</option>)}</select></Field>
             {form.original_balance && form.interest_rate && form.term_months && (
               <div className="bg-gray-800/60 border border-brand-600/30 rounded-xl px-4 py-3 text-sm flex justify-between items-center">
                 <span className="text-gray-400">{isMortgage(form.category) ? 'Calculated P&I payment' : 'Calculated monthly payment'}</span>
@@ -321,7 +389,16 @@ export default function Loans() {
                 )}
               </div>
             )}
-            <Field label="Notes (optional)"><input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any notes…" /></Field>
+
+            {/* Optional details */}
+            <div className="pt-2 border-t border-gray-800">
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-3">Optional</p>
+              <div className="space-y-4">
+                <Field label="Lender"><input value={form.lender} onChange={e => setForm(f => ({ ...f, lender: e.target.value }))} placeholder="e.g. Wells Fargo" /></Field>
+                <Field label="Notes"><input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any notes…" /></Field>
+              </div>
+            </div>
+
             <div className="flex gap-3 pt-2">
               <button onClick={() => setModal(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">Cancel</button>
               <button onClick={save} disabled={saving} className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">{saving ? 'Saving…' : 'Save'}</button>
@@ -390,6 +467,21 @@ export default function Loans() {
               <p className="text-sm text-brand-100 mt-0.5">Monthly payment reduced by {formatCurrency(savedMonths.savedPerMonth)}/mo over {savedMonths.newMonths} remaining months</p>
             </div>
             <button onClick={() => setSavedMonths(null)} className="text-brand-200 hover:text-white text-lg leading-none mt-0.5">✕</button>
+          </div>
+        </div>
+      )}
+
+      {/* Auto-pay toast */}
+      {autoPaid && (
+        <div className="fixed bottom-6 right-6 z-50 bg-blue-600 text-white px-5 py-4 rounded-2xl shadow-2xl max-w-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-semibold">💳 Auto-pay processed</p>
+              <p className="text-sm text-blue-100 mt-0.5">
+                {autoPaid.totalCycles} payment{autoPaid.totalCycles !== 1 ? 's' : ''} across {autoPaid.loanCount} loan{autoPaid.loanCount !== 1 ? 's' : ''}. Check History for details.
+              </p>
+            </div>
+            <button onClick={() => setAutoPaid(null)} className="text-blue-200 hover:text-white text-lg leading-none mt-0.5">✕</button>
           </div>
         </div>
       )}

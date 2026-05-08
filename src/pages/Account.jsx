@@ -12,7 +12,7 @@ export default function Account() {
 
   async function downgrade() {
     setLoading(true)
-    await supabase.from('profiles').update({ role: 'free' }).eq('id', user.id)
+    await supabase.rpc('downgrade_to_free')
     await refreshRole()
     setLoading(false)
     setConfirm(false)
