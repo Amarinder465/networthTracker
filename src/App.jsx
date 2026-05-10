@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { supabase } from './lib/supabase'
@@ -6,6 +7,7 @@ import Dashboard from './pages/Dashboard'
 import Assets from './pages/Assets'
 import Bills from './pages/Bills'
 import Loans from './pages/Loans'
+import Todos from './pages/Todos'
 import Trips from './pages/Trips'
 import SplitCheck from './pages/SplitCheck'
 import Admin from './pages/Admin'
@@ -18,6 +20,7 @@ const FREE_NAV = [
   { to: '/assets', label: 'Assets', icon: '🏦' },
   { to: '/bills',  label: 'Bills',  icon: '🧾' },
   { to: '/loans',  label: 'Loans',  icon: '📋' },
+  { to: '/todos',  label: 'Trading', icon: '📈' },
   { to: '/trip',   label: 'Trips',  icon: '✈️', locked: true },
   { to: '/split',  label: 'Split',  icon: '🍽️', locked: true },
 ]
@@ -27,6 +30,7 @@ const PRO_NAV = [
   { to: '/assets', label: 'Assets', icon: '🏦' },
   { to: '/bills',  label: 'Bills',  icon: '🧾' },
   { to: '/loans',  label: 'Loans',  icon: '📋' },
+  { to: '/todos',  label: 'Trading', icon: '📈' },
   { to: '/trip',   label: 'Trips',  icon: '✈️' },
   { to: '/split',  label: 'Split',  icon: '🍽️' },
 ]
@@ -41,17 +45,75 @@ function ProtectedRoute({ children }) {
 function Layout() {
   const { user, isAdmin, isPro, loading } = useAuth()
   const NAV = isPro ? PRO_NAV : FREE_NAV
+  const [showNavSettings, setShowNavSettings] = useState(false)
+  const [visibleNav, setVisibleNav] = useState(() => {
+    if (typeof window === 'undefined') return NAV.map(n => n.to)
+    try {
+      const saved = localStorage.getItem('visibleNav')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        const defaultNav = NAV.map(n => n.to)
+        // Filter to only include items that still exist in NAV
+        const valid = parsed.filter(v => defaultNav.includes(v))
+        return valid.length > 0 ? valid : defaultNav
+      }
+    } catch (e) {
+      console.error('Error reading visibleNav from localStorage:', e)
+    }
+    return NAV.map(n => n.to)
+  })
 
+  const handleToggleNav = (to) => {
+    const updated = visibleNav.includes(to)
+      ? visibleNav.filter(v => v !== to)
+      : [...visibleNav, to]
+    setVisibleNav(updated)
+    localStorage.setItem('visibleNav', JSON.stringify(updated))
+  }
+
+  const filteredNav = NAV.filter(n => visibleNav.includes(n.to))
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-950">
       {/* Top header */}
       <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
-        <span className="text-base font-bold tracking-tight text-white">💰 Wealth Tracker</span>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="text-base font-bold tracking-tight text-white">💰 Wealth Tracker</span>
+          <div className="relative">
+            <button
+              onClick={() => setShowNavSettings(!showNavSettings)}
+              className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm transition-all ${
+                showNavSettings
+                  ? 'bg-brand-600 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-800'
+              }`}
+              title="Customize navigation"
+            >
+              <span className="text-base">⚙️</span>
+              <span className="text-xs font-medium hidden sm:inline">Nav</span>
+            </button>
+            {showNavSettings && (
+              <div className="absolute top-11 left-0 bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-3 space-y-2 w-48 z-50">
+                <p className="text-xs font-semibold text-gray-400 px-2 mb-2">Show/Hide Navigation</p>
+                {NAV.map(item => (
+                  <label key={item.to} className="flex items-center gap-2 cursor-pointer hover:bg-gray-700 p-2 rounded transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={visibleNav.includes(item.to)}
+                      onChange={() => handleToggleNav(item.to)}
+                      className="w-4 h-4 accent-brand-600"
+                    />
+                    <span className="text-sm text-gray-300">{item.label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Desktop nav */}
         <nav className="hidden md:flex gap-1">
-          {NAV.map(({ to, label, locked }) => locked ? (
+          {filteredNav.map(({ to, label, locked }) => locked ? (
             <NavLink
               key={to}
               to={to}
@@ -109,6 +171,7 @@ function Layout() {
           <Route path="/assets" element={<Assets />}    />
           <Route path="/bills"  element={<Bills />}     />
           <Route path="/loans"  element={<Loans />}     />
+          <Route path="/todos"  element={<Todos />}     />
           <Route path="/trip"   element={loading ? null : isPro ? <Trips />      : <UpgradePrompt feature="Trips" />} />
           <Route path="/split"  element={loading ? null : isPro ? <SplitCheck /> : <UpgradePrompt feature="Split the Bill" />} />
           <Route path="/admin"   element={loading ? null : isAdmin ? <Admin /> : <Navigate to="/" replace />} />
@@ -119,7 +182,7 @@ function Layout() {
 
       {/* Mobile bottom tab bar */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-gray-900 border-t border-gray-800 flex">
-        {NAV.map(({ to, label, icon, locked }) => (
+        {filteredNav.map(({ to, label, icon, locked }) => (
           <NavLink
             key={to}
             to={to}
