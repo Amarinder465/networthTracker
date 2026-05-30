@@ -199,50 +199,50 @@ export default function Loans() {
     s + Number(l.min_payment ?? 0) + Number(l.pmi ?? 0) + Number(l.property_tax ?? 0) + Number(l.home_insurance ?? 0) + Number(l.hoa ?? 0), 0)
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-8 animate-fadeInUp">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Loans</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Total debt: {formatCurrency(totalDebt)} · Monthly payments: {formatCurrency(totalMonthly)}/mo</p>
+          <h1 className="text-5xl font-bold text-white">Loans & Debts</h1>
+          <p className="text-cyan-400 font-medium mt-2">Total debt: {formatCurrency(totalDebt)} · Monthly: {formatCurrency(totalMonthly)}/mo</p>
         </div>
-        <button onClick={openNew} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">+ Add Loan</button>
+        <button onClick={openNew} className="btn-primary text-sm">+ Add Loan</button>
       </div>
 
       {import.meta.env.DEV && (
-        <div className="flex flex-wrap items-center gap-3 bg-yellow-400/10 border border-yellow-400/30 rounded-xl px-4 py-2.5 text-sm">
-          <span className="text-yellow-400 font-medium">🧪 Test Mode</span>
-          <span className="text-gray-400">Simulate date:</span>
+        <div className="flex flex-wrap items-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-sm backdrop-blur">
+          <span className="text-amber-400 font-medium">🧪 Test Mode</span>
+          <span className="text-slate-400">Simulate date:</span>
           <input
             type="date"
             value={testDate}
             onChange={e => setTestDate(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-yellow-400"
+            className="input-field text-xs w-40"
           />
           <button
             onClick={runAutoPayForTestDate}
             disabled={!testDate || autoPaying}
-            className="bg-yellow-400/20 hover:bg-yellow-400/30 disabled:opacity-40 text-yellow-300 px-3 py-1 rounded-lg text-xs font-medium transition-colors"
+            className="bg-amber-500/20 hover:bg-amber-500/30 disabled:opacity-40 text-amber-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
             title="Runs auto-pay for any loans whose due date is before the simulated date. Writes to the database."
           >
-            {autoPaying ? 'Running…' : 'Run auto-pay through this date'}
+            {autoPaying ? '⏳ Running…' : 'Run auto-pay'}
           </button>
           {testDate && (
-            <button onClick={() => setTestDate('')} className="text-yellow-400 hover:text-yellow-300 text-xs transition-colors">
+            <button onClick={() => setTestDate('')} className="text-amber-400 hover:text-amber-300 text-xs transition-colors font-medium">
               Reset
             </button>
           )}
-          <span className="text-gray-500 text-xs ml-auto">⚠ Writes payments + advances due dates in the DB</span>
+          <span className="text-slate-500 text-xs ml-auto">⚠ Writes to database</span>
         </div>
       )}
 
       {loading ? <Spinner /> : loans.length === 0 ? (
-        <div className="text-center text-gray-500 mt-20">
-          <p className="text-4xl mb-3">📋</p>
-          <p className="text-lg font-medium">No loans yet</p>
-          <p className="text-sm mt-1">Add mortgages, car loans, student loans, credit cards, and more.</p>
+        <div className="text-center text-slate-500 mt-24">
+          <p className="text-5xl mb-4">📋</p>
+          <p className="text-lg font-bold text-slate-400">No loans tracked yet</p>
+          <p className="text-sm mt-2">Add mortgages, car loans, student loans, credit cards, and other debt.</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {loans.map(l => {
             const progress    = l.original_balance ? Math.round((1 - Number(l.balance) / Number(l.original_balance)) * 100) : null
             const monthsLeft  = calcMonthsRemainingFromStart(l.start_date, l.term_months)
@@ -251,52 +251,52 @@ export default function Loans() {
             const totalMonthlyPayment = Number(l.min_payment ?? 0) + escrow
             const mortgage    = isMortgage(l.category)
             return (
-              <div key={l.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div key={l.id} className="card">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-base">{l.name}</span>
-                      <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">{l.category}</span>
-                      {l.lender && <span className="text-xs text-gray-500">{l.lender}</span>}
+                      <span className="font-semibold text-lg text-slate-100">{l.name}</span>
+                      <span className="text-xs bg-slate-700/50 text-slate-300 px-2.5 py-1 rounded-full font-medium">{l.category}</span>
+                      {l.lender && <span className="text-xs text-slate-500">{l.lender}</span>}
                     </div>
-                    <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2 text-sm text-gray-400">
-                      {l.interest_rate && <span>{l.interest_rate}% APR</span>}
+                    <div className="flex flex-wrap gap-x-6 gap-y-2 mt-3 text-sm text-slate-400">
+                      {l.interest_rate && <span className="font-medium">{l.interest_rate}% APR</span>}
                       {l.term_months   && <span>Term: {l.term_months} mo</span>}
-                      {monthsLeft !== null && <span className="text-white font-medium">Remaining: {monthsLeft} mo</span>}
+                      {monthsLeft !== null && <span className="text-teal-400 font-bold">Remaining: {monthsLeft} mo</span>}
                       {l.due_date      && <span>Due: {formatDate(l.due_date)}</span>}
                     </div>
 
                     {/* Mortgage payment breakdown */}
                     {mortgage && (
-                      <div className="mt-3 grid grid-cols-2 sm:flex sm:flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 bg-gray-800/50 rounded-xl px-3 py-2">
-                        <span>P&I: <span className="text-white">{formatCurrency(effectivePI)}</span></span>
-                        {l.pmi            && <span>PMI: <span className="text-white">{formatCurrency(l.pmi)}</span></span>}
-                        {l.property_tax   && <span>Tax: <span className="text-white">{formatCurrency(l.property_tax)}</span></span>}
-                        {l.home_insurance && <span>Insurance: <span className="text-white">{formatCurrency(l.home_insurance)}</span></span>}
-                        {l.hoa            && <span>HOA: <span className="text-white">{formatCurrency(l.hoa)}</span></span>}
-                        <span className="text-yellow-400 font-medium">Total: {formatCurrency(effectivePI + Number(l.pmi ?? 0) + Number(l.property_tax ?? 0) + Number(l.home_insurance ?? 0) + Number(l.hoa ?? 0))}/mo</span>
+                      <div className="mt-4 grid grid-cols-2 sm:flex sm:flex-wrap gap-x-5 gap-y-2 text-xs text-slate-400 bg-slate-700/30 rounded-xl px-4 py-3 border border-slate-700/50">
+                        <span>P&I: <span className="text-slate-200 font-medium">{formatCurrency(effectivePI)}</span></span>
+                        {l.pmi            && <span>PMI: <span className="text-slate-200 font-medium">{formatCurrency(l.pmi)}</span></span>}
+                        {l.property_tax   && <span>Tax: <span className="text-slate-200 font-medium">{formatCurrency(l.property_tax)}</span></span>}
+                        {l.home_insurance && <span>Insurance: <span className="text-slate-200 font-medium">{formatCurrency(l.home_insurance)}</span></span>}
+                        {l.hoa            && <span>HOA: <span className="text-slate-200 font-medium">{formatCurrency(l.hoa)}</span></span>}
+                        <span className="text-amber-400 font-bold">Total: {formatCurrency(effectivePI + Number(l.pmi ?? 0) + Number(l.property_tax ?? 0) + Number(l.home_insurance ?? 0) + Number(l.hoa ?? 0))}/mo</span>
                       </div>
                     )}
 
                     {/* Non-mortgage min payment */}
                     {!mortgage && effectivePI > 0 && (
-                      <div className="mt-1 text-sm text-gray-400">Min: {formatCurrency(effectivePI)}/mo</div>
+                      <div className="mt-3 text-sm text-slate-300 font-medium">Min: <span className="text-amber-400">{formatCurrency(effectivePI)}</span>/mo</div>
                     )}
 
                     {progress !== null && (
-                      <div className="mt-3">
-                        <div className="flex justify-between text-xs text-gray-500 mb-1">
-                          <span>{progress}% paid off</span>
-                          <span>{formatCurrency(l.balance)} remaining</span>
+                      <div className="mt-4">
+                        <div className="flex justify-between text-xs text-slate-400 mb-2">
+                          <span className="font-medium">{progress}% paid off</span>
+                          <span className="text-slate-300">{formatCurrency(l.balance)} remaining</span>
                         </div>
-                        <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                          <div className="h-full bg-brand-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
+                        <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden border border-slate-700/30">
+                          <div className="h-full bg-gradient-to-r from-teal-600 to-teal-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
                         </div>
                       </div>
                     )}
                   </div>
                   <div className="sm:text-right shrink-0">
-                    <p className="text-xl font-bold text-red-400">{formatCurrency(l.balance)}</p>
+                    <p className="text-2xl font-bold text-rose-400">{formatCurrency(l.balance)}</p>
                     <div className="flex gap-2 mt-2 flex-wrap items-center sm:justify-end">
                       <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none" title="Include in net worth">
                         <input type="checkbox" checked={l.include_in_net_worth ?? true} onChange={() => toggleNetWorth(l)} className="w-3.5 h-3.5 accent-green-500 cursor-pointer" />

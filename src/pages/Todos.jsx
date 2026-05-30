@@ -15,7 +15,7 @@ export default function Trades() {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [viewMode, setViewMode] = useState('month') // 'day', 'month', 'year'
-  const [selectedDay, setSelectedDay] = useState(null)
+  const [selectedDay, setSelectedDay] = useState(new Date())
 
   async function load() {
     const { data } = await supabase
@@ -143,47 +143,49 @@ export default function Trades() {
 
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))
+  const prevYear = () => setCurrentDate(new Date(currentDate.getFullYear() - 1, currentDate.getMonth()))
+  const nextYear = () => setCurrentDate(new Date(currentDate.getFullYear() + 1, currentDate.getMonth()))
 
   return (
-    <div className="space-y-4 md:space-y-6 overflow-x-hidden">
+    <div className="space-y-8 overflow-x-hidden animate-fadeInUp">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Trade Tracker</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Log your daily P&L with calendar view</p>
+          <h1 className="text-5xl font-bold text-white">Trade Journal</h1>
+          <p className="text-cyan-400 font-medium mt-2">Track your P&L performance over time</p>
         </div>
-        <div className="flex gap-2 flex-shrink-0">
+        <div className="flex gap-2.5 flex-shrink-0">
           <button
             onClick={openAddLoss}
-            className="bg-red-500/20 hover:bg-red-500/30 text-red-400 px-3 sm:px-4 py-2 rounded-xl font-medium text-xs sm:text-sm transition-colors whitespace-nowrap"
+            className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 px-4 py-2.5 rounded-lg font-semibold text-xs sm:text-sm transition-all whitespace-nowrap"
           >
-            − Loss
+            ↓ Loss
           </button>
           <button
             onClick={openAddProfit}
-            className="bg-green-500/20 hover:bg-green-500/30 text-green-400 px-3 sm:px-4 py-2 rounded-xl font-medium text-xs sm:text-sm transition-colors whitespace-nowrap"
+            className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 px-4 py-2.5 rounded-lg font-semibold text-xs sm:text-sm transition-all whitespace-nowrap"
           >
-            + Profit
+            ↑ Profit
           </button>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-        <StatCard label="Total Trades" value={totalTrades} color="text-white" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard label="Total Trades" value={totalTrades} color="text-slate-100" />
         <StatCard
           label="Overall P&L"
           value={`$${totalProfit.toFixed(2)}`}
-          color={totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}
+          color={totalProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}
         />
         <StatCard
           label="Monthly"
           value={`$${monthlyTotal.toFixed(2)}`}
-          color={monthlyTotal >= 0 ? 'text-green-400' : 'text-red-400'}
+          color={monthlyTotal >= 0 ? 'text-emerald-400' : 'text-rose-400'}
         />
         <StatCard
           label="Yearly"
           value={`$${yearlyTotal.toFixed(2)}`}
-          color={yearlyTotal >= 0 ? 'text-green-400' : 'text-red-400'}
+          color={yearlyTotal >= 0 ? 'text-emerald-400' : 'text-rose-400'}
         />
       </div>
 
@@ -191,20 +193,20 @@ export default function Trades() {
       <div className="flex gap-2">
         <button
           onClick={() => setViewMode('month')}
-          className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
+          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
             viewMode === 'month'
-              ? 'bg-brand-600 text-white'
-              : 'bg-gray-800 text-gray-400 hover:text-white'
+              ? 'bg-teal-600 text-white shadow-lg shadow-teal-500/25'
+              : 'bg-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-700'
           }`}
         >
           Month
         </button>
         <button
           onClick={() => setViewMode('year')}
-          className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
+          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
             viewMode === 'year'
-              ? 'bg-brand-600 text-white'
-              : 'bg-gray-800 text-gray-400 hover:text-white'
+              ? 'bg-teal-600 text-white shadow-lg shadow-teal-500/25'
+              : 'bg-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-700'
           }`}
         >
           Year
@@ -213,15 +215,15 @@ export default function Trades() {
 
       {/* Calendar & Trades */}
       {loading ? (
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-6 text-center text-gray-400">Loading…</div>
+        <div className="card text-center text-slate-400">⏳ Loading…</div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 w-full">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
           {/* Calendar - 2/3 width on desktop */}
-          <div className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden w-full">
+          <div className="lg:col-span-2 card overflow-hidden">
           {/* Month Header */}
-          <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-800 flex items-center justify-between">
+          <div className="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between">
             <button
-              onClick={prevMonth}
+              onClick={viewMode === 'year' ? prevYear : prevMonth}
               className="text-gray-400 hover:text-white transition-colors text-xs sm:text-sm"
             >
               ← Prev
@@ -232,7 +234,7 @@ export default function Trades() {
                 : currentDate.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
             </h2>
             <button
-              onClick={nextMonth}
+              onClick={viewMode === 'year' ? nextYear : nextMonth}
               className="text-gray-400 hover:text-white transition-colors text-xs sm:text-sm"
             >
               Next →

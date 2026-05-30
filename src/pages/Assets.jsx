@@ -53,44 +53,44 @@ export default function Assets() {
   const total = assets.reduce((s, a) => s + Number(a.value), 0)
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-8 animate-fadeInUp">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Assets</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Total: {formatCurrency(total)}</p>
+          <h1 className="text-5xl font-bold text-white">Assets & Investments</h1>
+          <p className="text-cyan-400 font-medium mt-2">Total value: {formatCurrency(total)}</p>
         </div>
-        <button onClick={openNew} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">+ Add Asset</button>
+        <button onClick={openNew} className="btn-primary text-sm">+ Add Asset</button>
       </div>
 
       {loading ? <Spinner /> : assets.length === 0 ? (
-        <div className="text-center text-gray-500 mt-20">
-          <p className="text-4xl mb-3">🏦</p>
-          <p className="text-lg font-medium">No assets yet</p>
-          <p className="text-sm mt-1">Add cash, investments, property, and more.</p>
+        <div className="text-center text-slate-500 mt-24">
+          <p className="text-5xl mb-4">🏦</p>
+          <p className="text-lg font-bold text-slate-400">No assets tracked yet</p>
+          <p className="text-sm mt-2">Start adding cash, investments, property, and other assets.</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {assets.map(a => (
-            <div key={a.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-              <div className="flex items-start justify-between gap-3">
+            <div key={a.id} className="card">
+              <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold">{a.name}</span>
-                    <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">{a.category}</span>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <span className="font-semibold text-lg text-slate-100">{a.name}</span>
+                    <span className="text-xs bg-slate-700/50 text-slate-300 px-2.5 py-1 rounded-full font-medium">{a.category}</span>
                   </div>
-                  {a.notes && <p className="text-gray-500 text-xs mt-1 truncate">{a.notes}</p>}
-                  <div className="flex items-center gap-3 mt-2">
-                    <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none">
-                      <input type="checkbox" checked={a.include_in_net_worth ?? true} onChange={() => toggleNetWorth(a)} className="w-3.5 h-3.5 accent-green-500 cursor-pointer" />
-                      Net Worth
+                  {a.notes && <p className="text-slate-500 text-xs mt-2">{a.notes}</p>}
+                  <div className="flex items-center gap-3 mt-3">
+                    <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none hover:text-slate-300 transition-colors">
+                      <input type="checkbox" checked={a.include_in_net_worth ?? true} onChange={() => toggleNetWorth(a)} className="w-3.5 h-3.5 accent-teal-500 cursor-pointer rounded" />
+                      <span className="font-medium">Include in Net Worth</span>
                     </label>
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-lg font-bold text-brand-400">{formatCurrency(a.value)}</p>
-                  <div className="flex gap-3 mt-1 justify-end">
-                    <button onClick={() => openEdit(a)} className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors">Edit</button>
-                    <button onClick={() => setConfirmId(a.id)} className="text-xs px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors">Delete</button>
+                  <p className="text-2xl font-bold text-cyan-400">{formatCurrency(a.value)}</p>
+                  <div className="flex gap-2 mt-3 justify-end">
+                    <button onClick={() => openEdit(a)} className="text-xs px-3 py-1.5 rounded-lg bg-slate-700/60 text-slate-300 hover:bg-slate-700 transition-all hover:text-slate-100">Edit</button>
+                    <button onClick={() => setConfirmId(a.id)} className="text-xs px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-all">Delete</button>
                   </div>
                 </div>
               </div>

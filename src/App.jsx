@@ -37,7 +37,12 @@ const PRO_NAV = [
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
-  if (loading) return <div className="min-h-screen bg-gray-950 flex items-center justify-center text-gray-400">Loading…</div>
+  if (loading) return <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center text-slate-400">
+    <div className="text-center space-y-4">
+      <div className="text-4xl animate-pulse">💰</div>
+      <p className="text-sm">Loading your wealth dashboard…</p>
+    </div>
+  </div>
   if (!user)   return <Navigate to="/auth" replace />
   return children
 }
@@ -74,36 +79,36 @@ function Layout() {
   const filteredNav = NAV.filter(n => visibleNav.includes(n.to))
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-950">
+    <div className="min-h-screen flex flex-col bg-black">
       {/* Top header */}
-      <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <span className="text-base font-bold tracking-tight text-white">💰 Wealth Tracker</span>
+      <header className="relative border-b border-purple-500/20 px-4 py-4 flex items-center justify-between sticky top-0 z-40 backdrop-blur-xl" style={{background: 'rgba(10, 14, 39, 0.4)'}}>
+        <div className="flex items-center gap-3 sm:gap-4">
+          <span className="text-xl font-bold tracking-tight text-white">💰 <span className="hidden sm:inline text-gradient">Wealth</span></span>
           <div className="relative">
             <button
               onClick={() => setShowNavSettings(!showNavSettings)}
-              className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold transition-all ${
                 showNavSettings
-                  ? 'bg-brand-600 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  ? 'bg-gradient-to-r from-purple-600 to-purple-500 text-white'
+                  : 'text-slate-400 hover:text-white hover:bg-purple-900/20 border border-purple-500/20'
               }`}
               title="Customize navigation"
             >
               <span className="text-base">⚙️</span>
-              <span className="text-xs font-medium hidden sm:inline">Nav</span>
+              <span className="text-xs font-bold hidden sm:inline">Menu</span>
             </button>
             {showNavSettings && (
-              <div className="absolute top-11 left-0 bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-3 space-y-2 w-48 z-50">
-                <p className="text-xs font-semibold text-gray-400 px-2 mb-2">Show/Hide Navigation</p>
+              <div className="absolute top-12 left-0 rounded-lg shadow-2xl p-4 space-y-2 w-56 z-50 border border-purple-500/30 backdrop-blur-xl" style={{background: 'rgba(26, 31, 58, 0.6)'}}>
+                <p className="text-xs font-bold text-purple-300 px-2 mb-3 uppercase tracking-wider">Navigation</p>
                 {NAV.map(item => (
-                  <label key={item.to} className="flex items-center gap-2 cursor-pointer hover:bg-gray-700 p-2 rounded transition-colors">
+                  <label key={item.to} className="flex items-center gap-2 cursor-pointer hover:bg-purple-500/20 p-2 rounded transition-colors">
                     <input
                       type="checkbox"
                       checked={visibleNav.includes(item.to)}
                       onChange={() => handleToggleNav(item.to)}
-                      className="w-4 h-4 accent-brand-600"
+                      className="w-4 h-4 accent-cyan-400"
                     />
-                    <span className="text-sm text-gray-300">{item.label}</span>
+                    <span className="text-sm text-slate-300">{item.label}</span>
                   </label>
                 ))}
               </div>
@@ -112,12 +117,12 @@ function Layout() {
         </div>
 
         {/* Desktop nav */}
-        <nav className="hidden md:flex gap-1">
+        <nav className="hidden md:flex gap-2">
           {filteredNav.map(({ to, label, locked }) => locked ? (
             <NavLink
               key={to}
               to={to}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 flex items-center gap-1"
+              className="px-4 py-2 rounded-lg text-sm font-bold text-slate-600 flex items-center gap-1 bg-slate-900/30"
             >
               {label} <span className="text-xs">🔒</span>
             </NavLink>
@@ -127,8 +132,8 @@ function Layout() {
               to={to}
               end={to === '/'}
               className={({ isActive }) =>
-                `px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive ? 'bg-brand-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                `px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                  isActive ? 'bg-gradient-to-r from-purple-600 to-purple-500 text-white shadow-lg shadow-purple-500/30' : 'text-slate-400 hover:text-white hover:bg-purple-900/20 border border-purple-500/20'
                 }`
               }
             >
@@ -139,8 +144,8 @@ function Layout() {
             <NavLink
               to="/admin"
               className={({ isActive }) =>
-                `px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive ? 'bg-brand-600 text-white' : 'text-brand-400 hover:text-white hover:bg-gray-800'
+                `px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                  isActive ? 'bg-gradient-to-r from-purple-600 to-purple-500 text-white shadow-lg shadow-purple-500/30' : 'text-cyan-400 hover:text-cyan-300 hover:bg-cyan-900/20 border border-cyan-500/20'
                 }`
               }
             >
@@ -153,8 +158,8 @@ function Layout() {
           <NavLink
             to="/account"
             className={({ isActive }) =>
-              `flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg transition-colors ${
-                isActive ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'
+              `flex items-center gap-2 text-xs px-3 py-2 rounded-lg font-bold transition-all ${
+                isActive ? 'bg-gradient-to-r from-cyan-600 to-cyan-500 text-white' : 'text-slate-400 hover:text-white hover:bg-cyan-900/20 border border-cyan-500/20'
               }`
             }
           >
@@ -165,7 +170,7 @@ function Layout() {
       </header>
 
       {/* Page content */}
-      <main className="flex-1 p-4 md:p-6 max-w-6xl mx-auto w-full pb-24 md:pb-6">
+      <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full pb-24 md:pb-6">
         <Routes>
           <Route path="/"       element={<Dashboard />} />
           <Route path="/assets" element={<Assets />}    />
@@ -181,15 +186,15 @@ function Layout() {
       </main>
 
       {/* Mobile bottom tab bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-gray-900 border-t border-gray-800 flex">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-purple-500/20 backdrop-blur-xl flex" style={{background: 'rgba(10, 14, 39, 0.4)'}}>
         {filteredNav.map(({ to, label, icon, locked }) => (
           <NavLink
             key={to}
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium transition-colors ${
-                locked ? 'text-gray-600' : isActive ? 'text-brand-400' : 'text-gray-500'
+              `flex-1 flex flex-col items-center justify-center py-3 gap-1 text-[10px] font-bold transition-all ${
+                locked ? 'text-slate-600' : isActive ? 'text-purple-400' : 'text-slate-500 hover:text-slate-300'
               }`
             }
           >
@@ -201,8 +206,8 @@ function Layout() {
           <NavLink
             to="/admin"
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-[10px] font-medium transition-colors ${
-                isActive ? 'text-brand-400' : 'text-gray-500'
+              `flex-1 flex flex-col items-center justify-center py-3 gap-1 text-[10px] font-bold transition-all ${
+                isActive ? 'text-purple-400' : 'text-slate-500 hover:text-slate-300'
               }`
             }
           >
@@ -218,15 +223,15 @@ function Layout() {
 function UpgradePrompt({ feature }) {
   const navigate = useNavigate()
   return (
-    <div className="text-center mt-20 px-4">
-      <p className="text-5xl mb-4">🔒</p>
-      <p className="text-xl font-bold text-white">{feature}</p>
-      <p className="text-gray-400 text-sm mt-2 max-w-xs mx-auto">This feature is available on Pro.</p>
+    <div className="text-center mt-32 px-4">
+      <p className="text-6xl mb-6 animate-bounce">🔒</p>
+      <p className="text-2xl font-bold text-slate-100">{feature}</p>
+      <p className="text-slate-400 text-sm mt-3 max-w-sm mx-auto">This feature is exclusive to Pro members.</p>
       <button
         onClick={() => navigate('/upgrade')}
-        className="mt-6 bg-brand-600 hover:bg-brand-700 text-white px-6 py-3 rounded-xl font-semibold text-sm transition-colors"
+        className="btn-primary mt-8"
       >
-        Upgrade to Pro — It's Free
+        Unlock with Pro — It's Free
       </button>
     </div>
   )

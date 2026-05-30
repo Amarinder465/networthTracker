@@ -135,69 +135,72 @@ export default function Dashboard() {
   if (loading) return <Spinner />
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-fadeInUp">
       {import.meta.env.DEV && (
-        <div className="flex items-center gap-3 bg-yellow-400/10 border border-yellow-400/30 rounded-xl px-4 py-2.5 text-sm">
-          <span className="text-yellow-400 font-medium">🧪 Test Mode</span>
-          <span className="text-gray-400">Simulate date:</span>
+        <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-sm backdrop-blur">
+          <span className="text-amber-400 font-medium">🧪 Test Mode</span>
+          <span className="text-slate-400">Simulate date:</span>
           <input
             type="date"
             value={testDate}
             onChange={e => setTestDate(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-yellow-400"
+            className="input-field text-xs w-40"
           />
           {testDate && (
-            <button onClick={() => setTestDate('')} className="text-yellow-400 hover:text-yellow-300 text-xs transition-colors">
-              Reset to today
+            <button onClick={() => setTestDate('')} className="text-amber-400 hover:text-amber-300 text-xs transition-colors font-medium">
+              Reset
             </button>
           )}
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-5xl font-bold text-white mb-2">Dashboard</h1>
+          <p className="text-cyan-400 font-medium">Your financial universe at a glance</p>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
           {showNoteInput && (
             <input
               value={snapNote}
               onChange={e => setSnapNote(e.target.value)}
               placeholder="Optional note (e.g. April 2026)"
-              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 w-56"
+              className="input-field w-56"
             />
           )}
           <button
             onClick={() => showNoteInput ? saveSnapshot() : setShowNoteInput(true)}
             disabled={saving}
-            className="bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+            className="btn-primary text-sm"
           >
-            {saving ? 'Saving…' : '📸 Save Snapshot'}
+            {saving ? '⏳ Saving…' : '📸 Snapshot'}
           </button>
           {showNoteInput && (
-            <button onClick={() => setShowNoteInput(false)} className="text-gray-400 hover:text-white text-sm px-2 transition-colors">Cancel</button>
+            <button onClick={() => setShowNoteInput(false)} className="text-slate-400 hover:text-white text-sm px-4 py-2 border border-purple-500/20 rounded-lg transition-all font-bold">Cancel</button>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Net Worth" value={formatCurrency(netWorth)} color={netWorth >= 0 ? 'text-brand-500' : 'text-red-400'} />
-        <StatCard label="Total Assets" value={formatCurrency(totalAssets)} color="text-blue-400" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Net Worth" value={formatCurrency(netWorth)} color={netWorth >= 0 ? 'text-lime-400' : 'text-red-400'} />
+        <StatCard label="Total Assets" value={formatCurrency(totalAssets)} color="text-cyan-400" />
         <StatCard label="Total Debt" value={formatCurrency(totalDebt)} color="text-red-400" />
-        <StatCard label="Monthly Obligations" value={formatCurrency(monthlyBills)} sub="bills + loans" color="text-yellow-400" />
+        <StatCard label="Monthly Obligations" value={formatCurrency(monthlyBills)} sub="bills + loans" color="text-orange-400" />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <StatCard label="True Monthly Cost" value={formatCurrency(monthlyBills)} sub="bills + loans (all-in)" color="text-orange-400" />
-        <StatCard label="True Annual Cost" value={formatCurrency(yearlyBills)} sub="bills + loans × months left" color="text-orange-300" />
-        <StatCard label="Upcoming This Month" value={formatCurrency(upcomingTotal)} sub={`${upcomingCount} due (bills + loans)`} color="text-red-400" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatCard label="Monthly Cost" value={formatCurrency(monthlyBills)} sub="bills + loans (all-in)" color="text-orange-400" />
+        <StatCard label="Annual Cost" value={formatCurrency(yearlyBills)} sub="bills + loans × months left" color="text-orange-300" />
+        <StatCard label="Upcoming This Month" value={formatCurrency(upcomingTotal)} sub={`${upcomingCount} due (bills + loans)`} color="text-rose-400" />
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-400">Filter bills by category:</span>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <span className="text-sm text-slate-300 font-medium">Filter by category:</span>
           <select
             value={billFilter}
             onChange={e => setBillFilter(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors"
+            className="input-field text-sm w-48"
           >
             {billCategories.map(c => <option key={c}>{c}</option>)}
           </select>
@@ -207,20 +210,20 @@ export default function Dashboard() {
             label={`Monthly Bills${billFilter !== 'All' ? ` — ${billFilter}` : ''}`}
             value={formatCurrency(filteredMonthlyRaw + filteredYearlyRaw / 12)}
             sub="excl. loans"
-            color="text-purple-400"
+            color="text-violet-400"
           />
           <StatCard
             label={`Annual Bills${billFilter !== 'All' ? ` — ${billFilter}` : ''}`}
             value={formatCurrency(filteredYearlyRaw + filteredMonthlyRaw * 12)}
             sub="excl. loans"
-            color="text-purple-300"
+            color="text-violet-300"
           />
         </div>
       </div>
 
       {pieData.length > 0 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-          <h2 className="text-lg font-semibold mb-4">Assets by Category</h2>
+        <div className="card">
+          <h2 className="text-xl font-bold text-slate-100 mb-6">Asset Allocation</h2>
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
               <Pie data={pieData} cx="50%" cy="50%" innerRadius={70} outerRadius={110} paddingAngle={3} dataKey="value">
@@ -234,8 +237,8 @@ export default function Dashboard() {
       )}
 
       {chartData.length >= 2 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-          <h2 className="text-lg font-semibold mb-4">Net Worth Over Time</h2>
+        <div className="card">
+          <h2 className="text-xl font-bold text-slate-100 mb-6">Net Worth Trajectory</h2>
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
@@ -251,30 +254,30 @@ export default function Dashboard() {
       )}
 
       {history.length > 0 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-          <h2 className="text-lg font-semibold px-5 py-4 border-b border-gray-800">Snapshot History</h2>
+        <div className="card overflow-hidden">
+          <h2 className="text-xl font-bold text-slate-100 mb-4">Snapshot History</h2>
           <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[500px]">
             <thead>
-              <tr className="border-b border-gray-800 text-gray-400 text-left">
-                <th className="px-5 py-3 font-medium">Date</th>
-                <th className="px-5 py-3 font-medium text-right">Assets</th>
-                <th className="px-5 py-3 font-medium text-right">Debt</th>
-                <th className="px-5 py-3 font-medium text-right">Net Worth</th>
-                <th className="px-5 py-3 font-medium">Note</th>
-                <th className="px-5 py-3 font-medium"></th>
+              <tr className="border-b border-slate-700/50 text-slate-400 text-left">
+                <th className="px-4 py-3 font-semibold">Date</th>
+                <th className="px-4 py-3 font-semibold text-right">Assets</th>
+                <th className="px-4 py-3 font-semibold text-right">Debt</th>
+                <th className="px-4 py-3 font-semibold text-right">Net Worth</th>
+                <th className="px-4 py-3 font-semibold">Note</th>
+                <th className="px-4 py-3 font-semibold"></th>
               </tr>
             </thead>
             <tbody>
               {[...history].reverse().map(h => (
-                <tr key={h.id} className="border-b border-gray-800/60 hover:bg-gray-800/40 transition-colors">
-                  <td className="px-5 py-3 text-gray-300">{formatSnapshotDate(h.snapshot_date)}</td>
-                  <td className="px-5 py-3 text-right text-blue-400">{formatCurrency(h.total_assets)}</td>
-                  <td className="px-5 py-3 text-right text-red-400">{formatCurrency(h.total_debt)}</td>
-                  <td className={`px-5 py-3 text-right font-semibold ${Number(h.net_worth) >= 0 ? 'text-brand-400' : 'text-red-400'}`}>{formatCurrency(h.net_worth)}</td>
-                  <td className="px-5 py-3 text-gray-500">{h.note || '—'}</td>
-                  <td className="px-5 py-3 text-right">
-                    <button onClick={() => setConfirmId(h.id)} className="text-red-500 hover:text-red-400 transition-colors">Delete</button>
+                <tr key={h.id} className="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors">
+                  <td className="px-4 py-3 text-slate-300">{formatSnapshotDate(h.snapshot_date)}</td>
+                  <td className="px-4 py-3 text-right text-cyan-400 font-medium">{formatCurrency(h.total_assets)}</td>
+                  <td className="px-4 py-3 text-right text-rose-400 font-medium">{formatCurrency(h.total_debt)}</td>
+                  <td className={`px-4 py-3 text-right font-bold ${Number(h.net_worth) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(h.net_worth)}</td>
+                  <td className="px-4 py-3 text-slate-500">{h.note || '—'}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => setConfirmId(h.id)} className="text-rose-500 hover:text-rose-400 transition-colors text-xs font-medium">Delete</button>
                   </td>
                 </tr>
               ))}
@@ -285,10 +288,10 @@ export default function Dashboard() {
       )}
 
       {assets.length === 0 && loans.length === 0 && bills.length === 0 && (
-        <div className="text-center text-gray-500 mt-16">
-          <p className="text-4xl mb-3">📊</p>
-          <p className="text-lg font-medium">Nothing tracked yet</p>
-          <p className="text-sm mt-1">Add assets, bills, or loans to see your net worth.</p>
+        <div className="text-center text-slate-500 mt-24">
+          <p className="text-5xl mb-4">📊</p>
+          <p className="text-lg font-bold text-slate-400">No financial data yet</p>
+          <p className="text-sm mt-2 text-slate-500">Start by adding your assets, bills, and loans to track your wealth.</p>
         </div>
       )}
 
