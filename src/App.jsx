@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { supabase } from './lib/supabase'
@@ -55,21 +55,38 @@ function Layout() {
   const NAV = isPro ? PRO_NAV : FREE_NAV
   const [showNavSettings, setShowNavSettings] = useState(false)
   const [visibleNav, setVisibleNav] = useState(() => {
-    if (typeof window === 'undefined') return NAV.map(n => n.to)
+    const defaultNav = NAV.map(n => n.to)
+    if (typeof window === 'undefined') return defaultNav
     try {
       const saved = localStorage.getItem('visibleNav')
       if (saved) {
         const parsed = JSON.parse(saved)
-        const defaultNav = NAV.map(n => n.to)
-        // Filter to only include items that still exist in NAV
+        // Keep the user's existing choices (that still exist in NAV)…
         const valid = parsed.filter(v => defaultNav.includes(v))
-        return valid.length > 0 ? valid : defaultNav
+        // …and auto-show any tabs added since they last customized the layout,
+        // so new features (e.g. Bonuses) aren't hidden by an old saved list.
+        // `knownNav` records the tabs that existed last time, letting us tell a
+        // genuinely-new tab apart from one the user intentionally hid.
+        const known = JSON.parse(localStorage.getItem('knownNav') || 'null') || parsed
+        const newItems = defaultNav.filter(to => !known.includes(to))
+        const merged = [...valid, ...newItems]
+        return merged.length > 0 ? merged : defaultNav
       }
     } catch (e) {
       console.error('Error reading visibleNav from localStorage:', e)
     }
-    return NAV.map(n => n.to)
+    return defaultNav
   })
+
+  // Persist the current tab set + the (possibly newly-merged) layout once on
+  // mount, so a new tab shows a single time and later hides still stick.
+  useEffect(() => {
+    try {
+      localStorage.setItem('knownNav', JSON.stringify(NAV.map(n => n.to)))
+      localStorage.setItem('visibleNav', JSON.stringify(visibleNav))
+    } catch (e) { /* ignore storage errors */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleToggleNav = (to) => {
     const updated = visibleNav.includes(to)
