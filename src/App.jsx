@@ -14,12 +14,14 @@ import Admin from './pages/Admin'
 import Upgrade from './pages/Upgrade'
 import Account from './pages/Account'
 import SplitShare from './pages/SplitShare'
+import BankBonuses from './pages/BankBonuses'
 
 const FREE_NAV = [
   { to: '/',       label: 'Home',   icon: '📊' },
   { to: '/assets', label: 'Assets', icon: '🏦' },
   { to: '/bills',  label: 'Bills',  icon: '🧾' },
   { to: '/loans',  label: 'Loans',  icon: '📋' },
+  { to: '/bonuses',label: 'Bonuses',icon: '🎁' },
   { to: '/todos',  label: 'Trading', icon: '📈' },
   { to: '/trip',   label: 'Trips',  icon: '✈️', locked: true },
   { to: '/split',  label: 'Split',  icon: '🍽️', locked: true },
@@ -30,6 +32,7 @@ const PRO_NAV = [
   { to: '/assets', label: 'Assets', icon: '🏦' },
   { to: '/bills',  label: 'Bills',  icon: '🧾' },
   { to: '/loans',  label: 'Loans',  icon: '📋' },
+  { to: '/bonuses',label: 'Bonuses',icon: '🎁' },
   { to: '/todos',  label: 'Trading', icon: '📈' },
   { to: '/trip',   label: 'Trips',  icon: '✈️' },
   { to: '/split',  label: 'Split',  icon: '🍽️' },
@@ -176,6 +179,7 @@ function Layout() {
           <Route path="/assets" element={<Assets />}    />
           <Route path="/bills"  element={<Bills />}     />
           <Route path="/loans"  element={<Loans />}     />
+          <Route path="/bonuses" element={<BankBonuses />} />
           <Route path="/todos"  element={<Todos />}     />
           <Route path="/trip"   element={loading ? null : isPro ? <Trips />      : <UpgradePrompt feature="Trips" />} />
           <Route path="/split"  element={loading ? null : isPro ? <SplitCheck /> : <UpgradePrompt feature="Split the Bill" />} />

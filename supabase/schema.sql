@@ -167,3 +167,32 @@ $$;
 --   '0 8 * * *',
 --   $$ select process_monthly_loan_payments(); $$
 -- );
+
+-- ───────────────────────────────────────────────────────────────────
+-- Bank Bonuses (also available standalone in bank_bonuses.sql)
+-- ───────────────────────────────────────────────────────────────────
+create table if not exists bank_bonuses (
+  id                   uuid primary key default gen_random_uuid(),
+  user_id              uuid not null references auth.users(id) on delete cascade,
+  bank                 text not null,
+  account_type         text,
+  bonus_amount         numeric(15,2) not null default 0,
+  url                  text,
+  open_date            date,
+  deadline             date,
+  expected_payout_date date,
+  received             boolean not null default false,
+  received_date        date,
+  notes                text,
+  tasks                jsonb not null default '[]'::jsonb,
+  created_at           timestamptz default now(),
+  updated_at           timestamptz default now()
+);
+
+alter table bank_bonuses enable row level security;
+
+create policy "bank_bonuses: own rows" on bank_bonuses for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create index if not exists idx_bank_bonuses_user_id on bank_bonuses (user_id);
+
+create or replace trigger bank_bonuses_updated_at before update on bank_bonuses for each row execute function update_updated_at();
