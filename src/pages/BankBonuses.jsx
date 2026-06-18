@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { formatCurrency, formatDate } from '../lib/format'
 import Modal from '../components/Modal'
 import ConfirmModal from '../components/ConfirmModal'
-import { BONUS_OFFERS } from '../lib/bonusOffers'
+import { BONUS_OFFERS, VERIFIED_ON } from '../lib/bonusOffers'
 
 // ── date helpers (timezone-safe local dates) ──
 function isoDate(d) {
@@ -393,7 +393,7 @@ function BrowseModal({ onClose, onPick }) {
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300">{o.category}</span>
                   {o.verified
-                    ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">✓ Verified 2026-06-17</span>
+                    ? <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">✓ Verified {VERIFIED_ON}</span>
                     : <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">Verify terms</span>}
                 </div>
               </div>

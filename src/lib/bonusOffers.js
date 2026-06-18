@@ -6,9 +6,15 @@
 // becomes a concrete due date when instantiated.
 //
 // ⚠️ Bank bonuses change constantly and vary by region/eligibility. Offers marked
-// `verified: true` were checked against the live offer page on 2026-06-17. Everything
-// else is a well-known recurring offer — ALWAYS confirm the exact amount, promo code,
-// and terms on the bank's page (the link is included) before relying on it.
+// `verified: true` were checked against the live offer page on the VERIFIED_ON date
+// below. Everything else is a well-known recurring offer — ALWAYS confirm the exact
+// amount, promo code, and terms on the bank's page (the link is included).
+//
+// To refresh monthly: re-check the verified offers' pages, update any changed
+// amounts/dates here, and bump VERIFIED_ON.
+
+// Date the `verified: true` offers were last confirmed against their live pages.
+export const VERIFIED_ON = '2026-06-18'
 
 export const BONUS_OFFERS = [
   {
@@ -21,7 +27,7 @@ export const BONUS_OFFERS = [
     offerEnds: '2026-07-07',
     payoutDays: 90,
     verified: true,
-    note: 'New business checking customers only. You must enter the bonus offer code when opening. Bonus paid within ~30 days after the 60-day qualification period.',
+    note: 'New business customers only (one bonus per business every 24 months). You must enter the bonus offer code when opening. Bonus paid within ~30 days after the 60-day qualification period.',
     tasks: [
       { label: 'Open eligible business checking account (enter bonus code at signup)', target: null, dueInDays: 20 },
       { label: 'Deposit $2,500 or more into the account', target: 2500, dueInDays: 30 },
