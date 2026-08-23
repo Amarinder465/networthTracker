@@ -3,12 +3,12 @@ import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatCurrency } from '../lib/format'
 
-function calcSettlements(people, expenses) {
+function calcSettlements(people, expenses, fallbackPayer) {
   const net = {}
   people.forEach(p => { net[p.name] = 0 })
   expenses.forEach(exp => {
     const involved = exp.involved?.length ? exp.involved : people.map(p => p.name)
-    const paidBy   = exp.paid_by
+    const paidBy   = exp.paid_by || fallbackPayer
     if (!involved.length || !paidBy) return
     const share = Number(exp.amount) / involved.length
     net[paidBy] = (net[paidBy] ?? 0) + Number(exp.amount)
@@ -95,8 +95,14 @@ export default function SplitShare() {
 
   // trip calculations
   const total = expenses.reduce((s, e) => s + Number(e.amount), 0)
-  const { settlements } = people.length > 0 ? calcSettlements(people, expenses) : { settlements: [] }
+  const { settlements } = people.length > 0 ? calcSettlements(people, expenses, payer) : { settlements: [] }
   const byCategory = expenses.reduce((acc, e) => { acc[e.category] = (acc[e.category] ?? 0) + Number(e.amount); return acc }, {})
+  const paidTotals = expenses.reduce((acc, e) => {
+    const name = e.paid_by || payer
+    if (name) acc[name] = (acc[name] ?? 0) + Number(e.amount)
+    return acc
+  }, {})
+  const payerNames = Object.keys(paidTotals).sort((a, b) => paidTotals[b] - paidTotals[a])
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
@@ -121,7 +127,11 @@ export default function SplitShare() {
               {event.end_date ? ` → ${new Date(event.end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
             </p>
           )}
-          {payer && <p className="text-sm text-gray-400 mt-1">💳 Card holder: <span className="text-white font-medium">{payer}</span></p>}
+          {payerNames.length > 1
+            ? <p className="text-sm text-gray-400 mt-1">💳 {payerNames.length} people used their card</p>
+            : (payerNames[0] || payer)
+              ? <p className="text-sm text-gray-400 mt-1">💳 Card holder: <span className="text-white font-medium">{payerNames[0] || payer}</span></p>
+              : null}
           {isCreator && (
             <p className="text-xs text-brand-400 bg-brand-600/10 border border-brand-600/20 rounded-lg px-3 py-2 mt-3">
               ✓ You created this split — only you can mark people as paid.
@@ -263,7 +273,10 @@ export default function SplitShare() {
                         <span className="text-sm font-medium">{exp.description}</span>
                         <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">{exp.category}</span>
                       </div>
-                      <p className="text-xs text-gray-600 mt-0.5">Split between: {(exp.involved ?? []).join(', ')}</p>
+                      <p className="text-xs text-gray-600 mt-0.5">
+                        {(exp.paid_by || payer) && <span className="text-brand-400">💳 {exp.paid_by || payer} · </span>}
+                        Split between: {(exp.involved ?? []).join(', ')}
+                      </p>
                     </div>
                     <div className="text-right shrink-0">
                       <p className="font-bold text-sm">{formatCurrency(exp.amount)}</p>
@@ -274,19 +287,34 @@ export default function SplitShare() {
               </div>
             )}
 
+            {payerNames.length > 1 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                <h2 className="px-5 py-3 border-b border-gray-800 font-semibold text-sm">Who Paid</h2>
+                {payerNames.map((name, i, arr) => (
+                  <div key={name} className={`flex items-center justify-between px-5 py-3 ${i < arr.length - 1 ? 'border-b border-gray-800/60' : ''}`}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-xs font-semibold">{name[0].toUpperCase()}</div>
+                      <span className="text-sm text-white">{name}</span>
+                    </div>
+                    <span className="text-sm font-semibold text-brand-400">💳 {formatCurrency(paidTotals[name])}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {people.length > 0 && expenses.length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
                 <h2 className="px-5 py-3 border-b border-gray-800 font-semibold text-sm">Per Person</h2>
                 {people.map((p, i) => {
                   const owes    = expenses.reduce((s, e) => e.involved?.includes(p.name) ? s + Number(e.amount) / e.involved.length : s, 0)
-                  const isPayer = p.name === payer
-                  const balance = isPayer ? total - owes : -owes
+                  const paid    = paidTotals[p.name] ?? 0
+                  const balance = paid - owes
                   return (
                     <div key={p.id} className={`flex items-center justify-between px-5 py-3 ${i < people.length - 1 ? 'border-b border-gray-800/60' : ''}`}>
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-xs font-semibold">{p.name[0].toUpperCase()}</div>
                         <span className="text-sm">{p.name}</span>
-                        {isPayer && <span className="text-xs text-gray-500">💳</span>}
+                        {paid > 0 && <span className="text-xs text-gray-500">💳 {formatCurrency(paid)}</span>}
                       </div>
                       <div className="text-right text-xs">
                         <p className="text-gray-400">Share: <span className="text-white">{formatCurrency(owes)}</span></p>

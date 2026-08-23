@@ -15,15 +15,100 @@ const CAT_ICON = {
 }
 const TABS = ['People', 'Expenses', 'Summary', 'Overview']
 
-const EMPTY_EXPENSE = { description: '', category: 'Food', amount: '', involved: [] }
+const EMPTY_EXPENSE = { description: '', category: 'Food', amount: '', paidBy: '', involved: [] }
 
-function calcSettlements(people, expenses, payer) {
+// ── Paste import ──
+const MONTH_RE  = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b/i
+const SLASH_RE  = /\b(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\b/
+const REL_RE    = /\b(yesterday|today)\b/i
+const NOISE_RE  = /^(pending|posted|approved|processing|declined|all transactions|search transactions|recent transactions|transactions|filters?|refunds?|payments?|dining|travel|groceries|gas|shopping|last month|this month|over \$\d+|[\d,]+\s*pts?|\+?[\d,]+\s*points?)$/i
+
+const CATEGORY_RULES = [
+  [/(gas n go|\bgas\b|fuel|arco|exxon|maverik|shell|chevron|phillips|sinclair|conoco|circle k|7[- ]?eleven|tank full|kum ?& ?go|loves|sunoco|texaco|speedway|mobil)/i, 'Gas'],
+  [/(parking|garage|park ?mobile|meter)/i, 'Parking'],
+  [/(airlines?|airways|delta air|united air|southwest air|jetblue|alaska air|frontier air|spirit air|\bairport\b)/i, 'Flights'],
+  [/(hotel|motel|lodge|resort|airbnb|vrbo|marriott|hilton|hyatt|\binn\b)/i, 'Hotel'],
+  [/(turo|uber|lyft|taxi|hertz|enterprise rent|avis|budget rent|car rental|amtrak|transit|shuttle)/i, 'Transportation'],
+  [/(liquor|brewery|brewing|winery|bar\b|\bpub\b|tavern|taproom|cocktail|distiller|wine|spirits)/i, 'Drinks'],
+  [/(national park|adventure|excursion|rafting|zipline|gondola|lift ticket|museum|\btour\b|guide|rentals?)/i, 'Activities'],
+  [/(restaurant|cafe|coffee|grill|kitchen|pizza|burger|taco|sushi|ramen|cuisine|bbq|deli|bakery|gelato|ice cream|scoops|creamery|diner|eatery|bistro|kfc|mcdonald|chipotle|subway|panera|starbucks|dunkin|\bfood\b)/i, 'Food'],
+  [/(walmart|target|\bcvs\b|walgreens|market|grocer|safeway|kroger|costco|sprt|sport|\bshop\b|store|mall|outfitter)/i, 'Shopping'],
+]
+
+function guessCategory(description) {
+  for (const [re, cat] of CATEGORY_RULES) if (re.test(description)) return cat
+  return 'Other'
+}
+
+function extractAmount(line) {
+  const dollar = line.match(/(-?)\$\s?([\d,]+(?:\.\d{1,2})?)/)
+  if (dollar) return { value: Number(dollar[2].replace(/,/g, '')) * (dollar[1] ? -1 : 1), raw: dollar[0] }
+  const bare = line.match(/(?:^|\s)(-?[\d,]+\.\d{2})(?:\s|$)/)
+  if (bare) return { value: Number(bare[1].replace(/,/g, '')), raw: bare[1] }
+  return null
+}
+
+function extractDate(line) {
+  const m = line.match(MONTH_RE)
+  if (m) return { label: `${m[1][0].toUpperCase()}${m[1].slice(1, 3).toLowerCase()} ${m[2]}`, raw: m[0] }
+  const s = line.match(SLASH_RE)
+  if (s) return { label: s[1], raw: s[0] }
+  const r = line.match(REL_RE)
+  if (r) return { label: r[1][0].toUpperCase() + r[1].slice(1).toLowerCase(), raw: r[0] }
+  return null
+}
+
+function scrub(text) {
+  return text
+    .replace(/\b[\d,]+\s*pts?\b/gi, ' ')
+    .replace(/\b(pending|posted|approved|processing)\b/gi, ' ')
+    .replace(/[,;|\u00b7\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s\-\u2013\u2014]+|[\s\-\u2013\u2014]+$/g, '')
+    .trim()
+}
+
+// Accepts one-per-line ("Walmart, Aug 18, $76.12") or stacked app-screen output
+// (merchant / date / amount on separate lines). Returns editable draft rows.
+function parseTransactions(text) {
+  const lines = text.split(/\r?\n/).map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean)
+  const rows = []
+  let heldDesc = ''
+  let heldDate = ''
+  lines.forEach(line => {
+    if (NOISE_RE.test(line)) return
+    const amount = extractAmount(line)
+    if (!amount) {
+      const d = extractDate(line)
+      const rest = d ? scrub(line.replace(d.raw, ' ')) : scrub(line)
+      if (d) heldDate = d.label
+      if (rest) heldDesc = heldDesc ? `${heldDesc} ${rest}` : rest
+      return
+    }
+    let rest = line.replace(amount.raw, ' ')
+    const d = extractDate(rest)
+    let date = heldDate
+    if (d) { date = d.label; rest = rest.replace(d.raw, ' ') }
+    rest = scrub(rest)
+    if (/^[\d.\s]*$/.test(rest)) rest = ''
+    const description = rest || heldDesc || 'Expense'
+    if (amount.value > 0) {
+      rows.push({ description, date, amount: amount.value.toFixed(2), category: guessCategory(description) })
+    }
+    heldDesc = ''
+    heldDate = ''
+  })
+  return rows
+}
+
+function calcSettlements(people, expenses, fallbackPayer) {
   const net = {}
   people.forEach(p => { net[p.name] = 0 })
   expenses.forEach(exp => {
-    if (!exp.involved.length) return
+    const paidBy = exp.paid_by || fallbackPayer
+    if (!exp.involved.length || !paidBy) return
     const share = Number(exp.amount) / exp.involved.length
-    net[payer] = (net[payer] ?? 0) + Number(exp.amount)
+    net[paidBy] = (net[paidBy] ?? 0) + Number(exp.amount)
     exp.involved.forEach(name => { net[name] = (net[name] ?? 0) - share })
   })
   const creditors = Object.entries(net).filter(([, b]) => b > 0.01).map(([name, amount]) => ({ name, amount })).sort((a, b) => b.amount - a.amount)
@@ -75,10 +160,17 @@ export default function Trips() {
   const [editingTrip, setEditingTrip]     = useState(null)
   const [tripFormError, setTripFormError] = useState('')
   const [confirmExpense, setConfirmExpense] = useState(null)
-  const [settled, setSettled]     = useState({})
   const [gearOpen, setGearOpen]   = useState(false)
+  const [confirmPerson, setConfirmPerson] = useState(null)
+  const [editingPerson, setEditingPerson] = useState(null) // { id, name }
+  const [editPersonName, setEditPersonName] = useState('')
   const [copying, setCopying]     = useState(false)
   const [view, setView]           = useState('active') // 'active' | 'archived'
+  const [importModal, setImportModal] = useState(false)
+  const [importText, setImportText]   = useState('')
+  const [importRows, setImportRows]   = useState([])
+  const [importInvolved, setImportInvolved] = useState([])
+  const [importing, setImporting]     = useState(false)
 
   async function loadTrips() {
     const { data } = await supabase.from('split_events').select('*').eq('user_id', user.id).or('type.eq.trip,type.is.null').order('created_at', { ascending: false })
@@ -97,8 +189,9 @@ export default function Trips() {
     setPayerLocked(!!(trip.payer))
     setLateAdded([])
     setActive(trip)
-    setTab(trip.payer ? 'Expenses' : 'People')
-    setSettled({})
+    setTab((trip.payer || (e.data?.length ?? 0) > 0) ? 'Expenses' : 'People')
+    setEditingPerson(null)
+    setEditPersonName('')
   }
 
   useEffect(() => { loadTrips() }, [])
@@ -174,11 +267,49 @@ export default function Trips() {
   async function removePerson(id) {
     await supabase.from('split_people').delete().eq('id', id)
     setPeople(prev => prev.filter(p => p.id !== id))
+    setConfirmPerson(null)
+  }
+
+  // Renaming has to cascade: expenses store payer and split members by name,
+  // so a bare rename would orphan every expense referencing the old one.
+  async function renamePerson() {
+    const name = editPersonName.trim()
+    if (!name || !editingPerson) return
+    const oldName = editingPerson.name
+    if (name === oldName) { setEditingPerson(null); setEditPersonName(''); return }
+    if (people.some(p => p.id !== editingPerson.id && p.name.toLowerCase() === name.toLowerCase())) return
+
+    await supabase.from('split_people').update({ name }).eq('id', editingPerson.id)
+    await supabase.from('split_expenses').update({ paid_by: name }).eq('event_id', active.id).eq('paid_by', oldName)
+
+    const { data: affected } = await supabase.from('split_expenses').select('id, involved').eq('event_id', active.id)
+    await Promise.all((affected ?? []).filter(e => e.involved?.includes(oldName)).map(e =>
+      supabase.from('split_expenses').update({ involved: e.involved.map(n => n === oldName ? name : n) }).eq('id', e.id)
+    ))
+
+    if (payer === oldName) {
+      await supabase.from('split_events').update({ payer: name }).eq('id', active.id)
+      setPayer(name)
+      setActive(prev => ({ ...prev, payer: name }))
+    }
+
+    const { data: updated } = await supabase.from('split_expenses').select('*').eq('event_id', active.id).order('id', { ascending: true })
+    setExpenses(updated ?? [])
+    setPeople(prev => prev.map(p => p.id === editingPerson.id ? { ...p, name } : p))
+    setLateAdded(prev => prev.map(n => n === oldName ? name : n))
+    setEditingPerson(null)
+    setEditPersonName('')
+  }
+
+  async function togglePaid(personId, current) {
+    await supabase.from('split_people').update({ paid: !current }).eq('id', personId)
+    setPeople(prev => prev.map(p => p.id === personId ? { ...p, paid: !current } : p))
   }
 
   async function savePayer(name) {
-    setPayer(name)
-    await supabase.from('split_events').update({ payer: name }).eq('id', active.id)
+    setPayer(name ?? '')
+    if (!name) setPayerLocked(false)
+    await supabase.from('split_events').update({ payer: name || null }).eq('id', active.id)
   }
 
   async function generateLink() {
@@ -203,26 +334,26 @@ export default function Trips() {
   }
 
   function openNewExpense() {
-    setExpForm({ ...EMPTY_EXPENSE, involved: people.map(p => p.name) })
+    setExpForm({ ...EMPTY_EXPENSE, paidBy: payer || (people.length === 1 ? people[0].name : ''), involved: people.map(p => p.name) })
     setEditExpense(null)
     setExpenseModal(true)
   }
 
   function openEditExpense(exp) {
-    setExpForm({ description: exp.description, category: exp.category, amount: exp.amount, involved: exp.involved })
+    setExpForm({ description: exp.description, category: exp.category, amount: exp.amount, paidBy: exp.paid_by || payer || '', involved: exp.involved })
     setEditExpense(exp)
     setExpenseModal(true)
   }
 
   async function saveExpense() {
-    if (!expForm.description || !expForm.amount || !expForm.involved.length) return
+    if (!expForm.description || !expForm.amount || !expForm.paidBy || !expForm.involved.length) return
     setSaving(true)
     const payload = {
       event_id: active.id, user_id: user.id,
       description: expForm.description,
       category: expForm.category,
       amount: Number(expForm.amount),
-      paid_by: payer,
+      paid_by: expForm.paidBy,
       involved: expForm.involved,
     }
     if (editExpense) await supabase.from('split_expenses').update(payload).eq('id', editExpense.id)
@@ -238,6 +369,46 @@ export default function Trips() {
     setConfirmExpense(null)
   }
 
+  function openImport() {
+    setImportText('')
+    setImportRows([])
+    setImportInvolved(people.map(p => p.name))
+    setImportModal(true)
+  }
+
+  function readImportText(text) {
+    setImportText(text)
+    const fallback = payer || (people.length === 1 ? people[0].name : '')
+    setImportRows(parseTransactions(text).map(r => ({ ...r, paidBy: fallback })))
+  }
+
+  function updateImportRow(i, patch) {
+    setImportRows(rows => rows.map((r, idx) => idx === i ? { ...r, ...patch } : r))
+  }
+
+  function setAllImportPayers(name) {
+    setImportRows(rows => rows.map(r => ({ ...r, paidBy: name })))
+  }
+
+  async function saveImport() {
+    const rows = importRows.filter(r => r.description.trim() && Number(r.amount) > 0 && r.paidBy)
+    if (!rows.length || !importInvolved.length) return
+    setImporting(true)
+    await supabase.from('split_expenses').insert(rows.map(r => ({
+      event_id: active.id,
+      user_id: user.id,
+      description: r.date ? `${r.description.trim()} \u00b7 ${r.date}` : r.description.trim(),
+      category: r.category,
+      amount: Number(r.amount),
+      paid_by: r.paidBy,
+      involved: importInvolved,
+    })))
+    const { data } = await supabase.from('split_expenses').select('*').eq('event_id', active.id).order('id', { ascending: true })
+    setExpenses(data ?? [])
+    setImporting(false)
+    setImportModal(false)
+  }
+
   function toggleInvolved(name) {
     setExpForm(f => ({
       ...f,
@@ -246,7 +417,13 @@ export default function Trips() {
   }
 
   const total = expenses.reduce((s, e) => s + Number(e.amount), 0)
-  const { settlements } = (active && payer) ? calcSettlements(people, expenses, payer) : { settlements: [] }
+  const paidTotals = expenses.reduce((acc, e) => {
+    const name = e.paid_by || payer
+    if (name) acc[name] = (acc[name] ?? 0) + Number(e.amount)
+    return acc
+  }, {})
+  const payerNames = Object.keys(paidTotals).sort((a, b) => paidTotals[b] - paidTotals[a])
+  const { settlements } = (active && people.length > 0) ? calcSettlements(people, expenses, payer) : { settlements: [] }
   const byCategory = expenses.reduce((acc, e) => {
     acc[e.category] = (acc[e.category] ?? 0) + Number(e.amount)
     return acc
@@ -280,8 +457,11 @@ export default function Trips() {
             </>
           ) : (
             <>
-              {tab === 'Expenses' && people.length > 0 && payer && (
-                <button onClick={openNewExpense} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">+ Add Expense</button>
+              {tab === 'Expenses' && people.length > 0 && (
+                <>
+                  <button onClick={openImport} className="bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white px-3 py-2 rounded-xl text-sm font-medium transition-colors">\u2193 Import</button>
+                  <button onClick={openNewExpense} className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors">+ Add Expense</button>
+                </>
               )}
               <div className="relative">
                 <button
@@ -371,7 +551,7 @@ export default function Trips() {
           {/* Tabs */}
           <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1 w-fit">
             {TABS.map(t => {
-              const locked = (t === 'Expenses' || t === 'Summary') && (!payer || people.length === 0)
+              const locked = (t === 'Expenses' || t === 'Summary') && people.length === 0
               return (
                 <button key={t} onClick={() => !locked && setTab(t)} disabled={locked}
                   className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
@@ -404,11 +584,35 @@ export default function Trips() {
                   <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
                     {people.map((p, i) => (
                       <div key={p.id} className={`flex items-center justify-between px-5 py-3 ${i < people.length - 1 ? 'border-b border-gray-800/60' : ''}`}>
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-sm font-semibold">{p.name[0].toUpperCase()}</div>
-                          <span className="text-white text-sm">{p.name}</span>
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className="w-8 h-8 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-sm font-semibold shrink-0">
+                            {(editingPerson?.id === p.id ? editPersonName[0] : p.name[0])?.toUpperCase() ?? '?'}
+                          </div>
+                          {editingPerson?.id === p.id ? (
+                            <input
+                              autoFocus
+                              value={editPersonName}
+                              onChange={e => setEditPersonName(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') renamePerson(); if (e.key === 'Escape') { setEditingPerson(null); setEditPersonName('') } }}
+                              className="flex-1 min-w-0 bg-gray-800 border border-brand-500 rounded-lg px-2.5 py-1 text-sm text-white focus:outline-none"
+                            />
+                          ) : (
+                            <span className="text-white text-sm truncate">{p.name}</span>
+                          )}
                         </div>
-                        <button onClick={() => removePerson(p.id)} className="text-xs px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors">Remove</button>
+                        <div className="flex items-center gap-2 shrink-0 ml-3">
+                          {editingPerson?.id === p.id ? (
+                            <>
+                              <button onClick={renamePerson} className="text-xs px-2.5 py-1 rounded-lg bg-brand-600/20 text-brand-400 hover:bg-brand-600/30 transition-colors">Save</button>
+                              <button onClick={() => { setEditingPerson(null); setEditPersonName('') }} className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition-colors">Cancel</button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={() => { setEditingPerson(p); setEditPersonName(p.name) }} className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 text-gray-400 hover:text-white transition-colors">Edit</button>
+                              <button onClick={() => setConfirmPerson(p.id)} className="text-xs px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors">Remove</button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -418,7 +622,7 @@ export default function Trips() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-semibold text-white">Who used their card?</p>
-                        <p className="text-xs text-gray-500">All expenses will be assumed paid by this person.</p>
+                        <p className="text-xs text-gray-500">Sets the default on new expenses. If several people paid, pick the payer on each expense.</p>
                       </div>
                       {payerLocked && payer && (
                         <button onClick={() => setPayerLocked(false)} className="text-xs text-gray-400 hover:text-white transition-colors px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700">
@@ -431,28 +635,34 @@ export default function Trips() {
                       <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-brand-500 bg-brand-500/10">
                         <div className="w-6 h-6 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-xs font-semibold shrink-0">{payer[0].toUpperCase()}</div>
                         <span className="text-white text-sm font-medium">{payer}</span>
-                        <span className="ml-auto text-brand-400 text-xs">💳 Locked</span>
+                        <span className="ml-auto text-brand-400 text-xs">💳 Default</span>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 gap-2">
-                        {people.map(p => (
-                          <button key={p.id} onClick={() => savePayer(p.name)}
-                            className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
-                              payer === p.name ? 'border-brand-500 bg-brand-500/10 text-white' : 'border-gray-700 bg-gray-800 text-gray-400 hover:text-white hover:border-gray-600'
-                            }`}>
-                            <div className="w-6 h-6 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-xs font-semibold shrink-0">{p.name[0].toUpperCase()}</div>
-                            {p.name}
-                          </button>
-                        ))}
-                      </div>
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          {people.map(p => (
+                            <button key={p.id} onClick={() => savePayer(p.name)}
+                              className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
+                                payer === p.name ? 'border-brand-500 bg-brand-500/10 text-white' : 'border-gray-700 bg-gray-800 text-gray-400 hover:text-white hover:border-gray-600'
+                              }`}>
+                              <div className="w-6 h-6 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-xs font-semibold shrink-0">{p.name[0].toUpperCase()}</div>
+                              {p.name}
+                            </button>
+                          ))}
+                        </div>
+                        <button onClick={() => savePayer(null)}
+                          className={`w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
+                            payer ? 'border-gray-700 bg-gray-800 text-gray-400 hover:text-white hover:border-gray-600' : 'border-brand-500 bg-brand-500/10 text-white'
+                          }`}>
+                          <span>👥</span> Multiple cards — pick per expense
+                        </button>
+                      </>
                     )}
                   </div>
 
-                  {payer && (
-                    <button onClick={() => { setPayerLocked(true); setTab('Expenses') }} className="w-full bg-brand-600 hover:bg-brand-700 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
-                      Next — Add Expenses →
-                    </button>
-                  )}
+                  <button onClick={() => { if (payer) setPayerLocked(true); setTab('Expenses') }} className="w-full bg-brand-600 hover:bg-brand-700 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
+                    Next — Add Expenses →
+                  </button>
                 </>
               )}
             </div>
@@ -475,7 +685,9 @@ export default function Trips() {
                 <div className="col-span-2 sm:col-span-1 bg-gray-900 border border-brand-600/40 rounded-2xl p-4 flex flex-col gap-1">
                   <p className="text-xs text-gray-400 uppercase tracking-wide">Total Spent</p>
                   <p className="text-xl font-bold text-brand-400">{formatCurrency(total)}</p>
-                  <p className="text-xs text-gray-500">💳 {payer}</p>
+                  <p className="text-xs text-gray-500">
+                    {payerNames.length === 0 ? '—' : payerNames.length === 1 ? `💳 ${payerNames[0]}` : `💳 ${payerNames.length} cards`}
+                  </p>
                 </div>
 
                 {/* Per person card */}
@@ -519,6 +731,11 @@ export default function Trips() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm text-white truncate">{exp.description}</p>
                         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          {(exp.paid_by || payer) && (
+                            <span className="inline-flex items-center gap-1 bg-brand-600/20 text-brand-300 text-xs px-2 py-0.5 rounded-full font-medium">
+                              💳 {exp.paid_by || payer}
+                            </span>
+                          )}
                           {exp.involved.map(name => (
                             <span key={name} className="inline-flex items-center gap-1 bg-gray-800 text-gray-300 text-xs px-2 py-0.5 rounded-full">
                               <span className="w-4 h-4 bg-brand-600/30 text-brand-400 rounded-full flex items-center justify-center text-[10px] font-semibold">{name[0].toUpperCase()}</span>
@@ -551,19 +768,35 @@ export default function Trips() {
                 <p className="text-gray-500 text-sm text-center mt-6">Add expenses first to see the summary.</p>
               ) : (
                 <>
+                  {/* Who paid */}
+                  {payerNames.length > 1 && (
+                    <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                      <h2 className="px-5 py-3 border-b border-gray-800 font-semibold text-sm">Who Paid</h2>
+                      {payerNames.map(name => (
+                        <div key={name} className="flex items-center justify-between px-5 py-3 border-b border-gray-800/60 last:border-0">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-xs font-semibold">{name[0].toUpperCase()}</div>
+                            <span className="text-sm text-white">{name}</span>
+                          </div>
+                          <span className="text-sm font-semibold text-brand-400">💳 {formatCurrency(paidTotals[name])}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Per person */}
                   <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
                     <h2 className="px-5 py-3 border-b border-gray-800 font-semibold text-sm">Per Person</h2>
                     {people.map(p => {
                       const owes    = expenses.reduce((s, e) => e.involved.includes(p.name) ? s + Number(e.amount) / e.involved.length : s, 0)
-                      const isPayer = p.name === payer
-                      const balance = isPayer ? total - owes : -owes
+                      const paid    = paidTotals[p.name] ?? 0
+                      const balance = paid - owes
                       return (
                         <div key={p.id} className="flex items-center justify-between px-5 py-3 border-b border-gray-800/60 last:border-0">
                           <div className="flex items-center gap-2">
                             <div className="w-7 h-7 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-xs font-semibold">{p.name[0].toUpperCase()}</div>
                             <span className="text-sm text-white">{p.name}</span>
-                            {isPayer && <span className="text-xs text-gray-500">💳</span>}
+                            {paid > 0 && <span className="text-xs text-gray-500">💳 paid {formatCurrency(paid)}</span>}
                           </div>
                           <div className="text-right text-xs">
                             <p className="text-gray-400">Share: <span className="text-white">{formatCurrency(owes)}</span></p>
@@ -582,24 +815,29 @@ export default function Trips() {
                   ) : (
                     <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
                       <h2 className="px-5 py-3 border-b border-gray-800 font-semibold text-sm">Who Pays Who</h2>
-                      {settlements.map((s, i) => (
-                        <div key={i} className={`flex items-center justify-between px-5 py-3 border-b border-gray-800/60 last:border-0 ${settled[i] ? 'opacity-40' : ''}`}>
-                          <div className="text-sm">
-                            <span className="text-red-400 font-medium">{s.from}</span>
-                            <span className="text-gray-500 mx-2">→</span>
-                            <span className="text-brand-400 font-medium">{s.to}</span>
+                      {settlements.map((s, i) => {
+                        const person = people.find(p => p.name === s.from)
+                        return (
+                          <div key={i} className={`flex items-center justify-between px-5 py-3 border-b border-gray-800/60 last:border-0 ${person?.paid ? 'opacity-40' : ''}`}>
+                            <div className="text-sm">
+                              <span className="text-red-400 font-medium">{s.from}</span>
+                              <span className="text-gray-500 mx-2">→</span>
+                              <span className="text-brand-400 font-medium">{s.to}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="font-bold text-white">{formatCurrency(s.amount)}</span>
+                              {person && (
+                                <button
+                                  onClick={() => togglePaid(person.id, person.paid)}
+                                  className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors ${person.paid ? 'bg-brand-600/20 text-brand-400' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+                                >
+                                  {person.paid ? '✓ Paid' : 'Mark Paid'}
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <span className="font-bold text-white">{formatCurrency(s.amount)}</span>
-                            <button
-                              onClick={() => setSettled(prev => ({ ...prev, [i]: !prev[i] }))}
-                              className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors ${settled[i] ? 'bg-brand-600/20 text-brand-400' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
-                            >
-                              {settled[i] ? '✓ Settled' : 'Mark Settled'}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </>
@@ -751,6 +989,20 @@ export default function Trips() {
               <input type="number" min="0" step="0.01" value={expForm.amount} onChange={e => setExpForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
             </Field>
             <div>
+              <label className="block text-sm text-gray-400 mb-2">Who paid?</label>
+              <div className="grid grid-cols-2 gap-2">
+                {people.map(p => (
+                  <button key={p.id} type="button" onClick={() => setExpForm(f => ({ ...f, paidBy: p.name }))}
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
+                      expForm.paidBy === p.name ? 'border-brand-500 bg-brand-500/10 text-white' : 'border-gray-700 bg-gray-800 text-gray-400 hover:text-white hover:border-gray-600'
+                    }`}>
+                    <div className="w-6 h-6 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-xs font-semibold shrink-0">{p.name[0].toUpperCase()}</div>
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
               <label className="block text-sm text-gray-400 mb-2">Who was involved?</label>
               <div className="grid grid-cols-2 gap-2">
                 {people.map(p => (
@@ -766,7 +1018,100 @@ export default function Trips() {
             </div>
             <div className="flex gap-3 pt-1">
               <button onClick={() => setExpenseModal(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">Cancel</button>
-              <button onClick={saveExpense} disabled={saving || !expForm.description || !expForm.amount || !expForm.involved.length} className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">{saving ? 'Saving…' : 'Save'}</button>
+              <button onClick={saveExpense} disabled={saving || !expForm.description || !expForm.amount || !expForm.paidBy || !expForm.involved.length} className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">{saving ? 'Saving…' : 'Save'}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Import Transactions Modal */}
+      {importModal && (
+        <Modal title="Import Transactions" onClose={() => setImportModal(false)}>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1.5">Paste transactions</label>
+              <textarea
+                value={importText}
+                onChange={e => readImportText(e.target.value)}
+                rows={importRows.length ? 4 : 9}
+                placeholder={'Walmart, Aug 18, $76.12\nTBar, Aug 19, $178.80\n\nOr paste straight from your bank app.'}
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-brand-500 transition-colors"
+              />
+              <p className="text-xs text-gray-500 mt-1.5">
+                {importRows.length > 0
+                  ? `Found ${importRows.length} transaction${importRows.length !== 1 ? 's' : ''} \u00b7 ${formatCurrency(importRows.reduce((s, r) => s + Number(r.amount || 0), 0))}`
+                  : 'Merchant, date and amount \u2014 one per line, or stacked.'}
+              </p>
+            </div>
+
+            {importRows.length > 0 && (
+              <>
+                {people.length > 0 && (
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Set all to paid by</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {people.map(p => (
+                        <button key={p.id} type="button" onClick={() => setAllImportPayers(p.name)}
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-700 bg-gray-800 text-gray-400 hover:text-white hover:border-gray-600 text-sm font-medium transition-colors">
+                          <div className="w-5 h-5 bg-brand-600/20 text-brand-400 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0">{p.name[0].toUpperCase()}</div>
+                          {p.name}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1.5">You can still change the payer on any single row below.</p>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Who was involved? (applies to all)</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {people.map(p => (
+                      <label key={p.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-colors text-sm ${importInvolved.includes(p.name) ? 'border-brand-500 bg-brand-500/10 text-white' : 'border-gray-700 bg-gray-800 text-gray-400'}`}>
+                        <input type="checkbox" checked={importInvolved.includes(p.name)} className="accent-green-500"
+                          onChange={() => setImportInvolved(list => list.includes(p.name) ? list.filter(n => n !== p.name) : [...list, p.name])} />
+                        {p.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm text-gray-400">Review \u0026 edit</label>
+                  {importRows.map((r, i) => (
+                    <div key={i} className="bg-gray-800/60 border border-gray-700 rounded-xl p-2.5 space-y-2">
+                      <div className="flex gap-2">
+                        <input value={r.description} onChange={e => updateImportRow(i, { description: e.target.value })}
+                          className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-brand-500" />
+                        <input value={r.amount} onChange={e => updateImportRow(i, { amount: e.target.value })} inputMode="decimal"
+                          className="w-20 shrink-0 bg-gray-800 border border-gray-700 rounded-lg px-2.5 py-1.5 text-sm text-white text-right focus:outline-none focus:border-brand-500" />
+                        <button onClick={() => setImportRows(rows => rows.filter((_, idx) => idx !== i))}
+                          className="shrink-0 px-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs transition-colors">\u2715</button>
+                      </div>
+                      <div className="flex gap-2">
+                        <select value={r.category} onChange={e => updateImportRow(i, { category: e.target.value })}
+                          className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500">
+                          {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                        </select>
+                        <select value={r.paidBy} onChange={e => updateImportRow(i, { paidBy: e.target.value })}
+                          className={`flex-1 min-w-0 bg-gray-800 border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-brand-500 ${r.paidBy ? 'border-gray-700 text-white' : 'border-red-500/50 text-red-400'}`}>
+                          <option value="">Who paid?</option>
+                          {people.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                        </select>
+                        {r.date && <span className="shrink-0 text-xs text-gray-500 self-center">{r.date}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => setImportModal(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">Cancel</button>
+              <button onClick={saveImport}
+                disabled={importing || !importRows.length || !importInvolved.length || importRows.some(r => !r.paidBy || !(Number(r.amount) > 0))}
+                className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium transition-colors">
+                {importing ? 'Adding\u2026' : `Add ${importRows.length} expense${importRows.length !== 1 ? 's' : ''}`}
+              </button>
             </div>
           </div>
         </Modal>
@@ -774,6 +1119,7 @@ export default function Trips() {
 
       {confirmTrip && <ConfirmModal message={`Delete "${confirmTrip.name}"? All expenses will be lost.`} onConfirm={() => deleteTrip(confirmTrip)} onCancel={() => setConfirmTrip(null)} />}
       {confirmExpense && <ConfirmModal message="Delete this expense?" onConfirm={() => deleteExpense(confirmExpense)} onCancel={() => setConfirmExpense(null)} />}
+      {confirmPerson && <ConfirmModal message="Remove this person? Expenses that name them keep the old name." onConfirm={() => removePerson(confirmPerson)} onCancel={() => setConfirmPerson(null)} />}
     </div>
   )
 }
