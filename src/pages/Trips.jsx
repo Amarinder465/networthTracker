@@ -731,6 +731,9 @@ export default function Trips() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm text-white truncate">{exp.description}</p>
                         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                          <span className="inline-flex items-center bg-gray-800 text-gray-400 text-xs px-2 py-0.5 rounded-full">
+                            {exp.category}
+                          </span>
                           {(exp.paid_by || payer) && (
                             <span className="inline-flex items-center gap-1 bg-brand-600/20 text-brand-300 text-xs px-2 py-0.5 rounded-full font-medium">
                               💳 {exp.paid_by || payer}
