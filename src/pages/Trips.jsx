@@ -127,6 +127,38 @@ function calcSettlements(people, expenses, fallbackPayer) {
   return { net, settlements }
 }
 
+const MONTH_INDEX = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 }
+const MONTH_LABEL = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const DATE_IN_TEXT = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b/gi
+
+// split_expenses has no date column yet, so the date lives in the description
+// ("Tank Full \u00b7 Aug 20"). Read the last month+day mentioned; for a range
+// like "moab aug 16-18" that still yields the start date.
+function parseExpenseDate(description) {
+  const matches = [...(description ?? '').matchAll(DATE_IN_TEXT)]
+  if (!matches.length) return null
+  const [, month, day] = matches[matches.length - 1]
+  const m = MONTH_INDEX[month.slice(0, 3).toLowerCase()]
+  const d = Number(day)
+  if (m === undefined || !(d >= 1 && d <= 31)) return null
+  return { month: m, day: d, label: `${MONTH_LABEL[m]} ${d}` }
+}
+
+// Trips are short, so month+day sorts correctly on its own except across a
+// year boundary — anchor to the trip's start month and roll December into the
+// previous year when a trip spans New Year.
+function expenseSortKey(parsed, trip) {
+  if (!parsed) return Number.POSITIVE_INFINITY
+  const startMonth = trip?.start_date ? Number(trip.start_date.slice(5, 7)) - 1 : null
+  const yearOffset = (startMonth !== null && parsed.month < startMonth - 6) ? 1 : 0
+  return yearOffset * 10000 + parsed.month * 100 + parsed.day
+}
+
+// The date becomes the group heading, so drop it from the row itself.
+function stripDateSuffix(description) {
+  return (description ?? '').replace(/\s*[\u00b7\u2013\u2014-]\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\s*$/i, '').trim()
+}
+
 function calcNights(start, end) {
   if (!start || !end) return null
   const diff = new Date(end + 'T00:00:00') - new Date(start + 'T00:00:00')
@@ -423,6 +455,16 @@ export default function Trips() {
     return acc
   }, {})
   const payerNames = Object.keys(paidTotals).sort((a, b) => paidTotals[b] - paidTotals[a])
+  const datedExpenses = expenses
+    .map(e => { const parsed = parseExpenseDate(e.description); return { ...e, parsed, sortKey: expenseSortKey(parsed, active) } })
+    .sort((a, b) => a.sortKey - b.sortKey || a.id - b.id)
+  const expenseGroups = datedExpenses.reduce((groups, e) => {
+    const label = e.parsed?.label ?? 'No date'
+    const last = groups[groups.length - 1]
+    if (last && last.label === label) last.items.push(e)
+    else groups.push({ label, items: [e] })
+    return groups
+  }, [])
   const { settlements } = (active && people.length > 0) ? calcSettlements(people, expenses, payer) : { settlements: [] }
   const byCategory = expenses.reduce((acc, e) => {
     acc[e.category] = (acc[e.category] ?? 0) + Number(e.amount)
@@ -720,8 +762,14 @@ export default function Trips() {
                     <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Expenses</p>
                     <p className="text-xs text-gray-500">{expenses.length} item{expenses.length !== 1 ? 's' : ''}</p>
                   </div>
-                  {expenses.map((exp, i) => (
-                    <div key={exp.id} className={`px-5 py-4 flex items-center gap-4 ${i < expenses.length - 1 ? 'border-b border-gray-800/60' : ''}`}>
+                  {expenseGroups.map(group => (
+                    <div key={group.label}>
+                      <div className="px-5 py-2 bg-gray-800/40 border-y border-gray-800/60 flex items-center justify-between">
+                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{group.label}</span>
+                        <span className="text-xs text-gray-500">{formatCurrency(group.items.reduce((s, e) => s + Number(e.amount), 0))}</span>
+                      </div>
+                      {group.items.map((exp, i) => (
+                    <div key={exp.id} className={`px-5 py-4 flex items-center gap-4 ${i < group.items.length - 1 ? 'border-b border-gray-800/60' : ''}`}>
                       {/* Category icon */}
                       <div className="w-10 h-10 bg-gray-800 rounded-xl flex items-center justify-center text-lg shrink-0">
                         {CAT_ICON[exp.category] ?? '📦'}
@@ -729,7 +777,7 @@ export default function Trips() {
 
                       {/* Description + avatars */}
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm text-white truncate">{exp.description}</p>
+                        <p className="font-medium text-sm text-white truncate">{stripDateSuffix(exp.description) || exp.description}</p>
                         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                           <span className="inline-flex items-center bg-gray-800 text-gray-400 text-xs px-2 py-0.5 rounded-full">
                             {exp.category}
@@ -757,6 +805,8 @@ export default function Trips() {
                           <button onClick={() => setConfirmExpense(exp.id)} className="text-xs px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors">Delete</button>
                         </div>
                       </div>
+                    </div>
+                      ))}
                     </div>
                   ))}
                 </div>
