@@ -7,7 +7,7 @@ import Dashboard from './pages/Dashboard'
 import Assets from './pages/Assets'
 import Bills from './pages/Bills'
 import Loans from './pages/Loans'
-import Todos from './pages/Todos'
+import Trades from './pages/Trades'
 import Trips from './pages/Trips'
 import SplitCheck from './pages/SplitCheck'
 import Admin from './pages/Admin'
@@ -22,7 +22,7 @@ const FREE_NAV = [
   { to: '/bills',  label: 'Bills',  icon: '🧾' },
   { to: '/loans',  label: 'Loans',  icon: '📋' },
   { to: '/bonuses',label: 'Bonuses',icon: '🎁' },
-  { to: '/todos',  label: 'Trading', icon: '📈' },
+  { to: '/trades', label: 'Trading', icon: '📈' },
   { to: '/trip',   label: 'Trips',  icon: '✈️', locked: true },
   { to: '/split',  label: 'Split',  icon: '🍽️', locked: true },
 ]
@@ -33,7 +33,7 @@ const PRO_NAV = [
   { to: '/bills',  label: 'Bills',  icon: '🧾' },
   { to: '/loans',  label: 'Loans',  icon: '📋' },
   { to: '/bonuses',label: 'Bonuses',icon: '🎁' },
-  { to: '/todos',  label: 'Trading', icon: '📈' },
+  { to: '/trades', label: 'Trading', icon: '📈' },
   { to: '/trip',   label: 'Trips',  icon: '✈️' },
   { to: '/split',  label: 'Split',  icon: '🍽️' },
 ]
@@ -197,7 +197,9 @@ function Layout() {
           <Route path="/bills"  element={<Bills />}     />
           <Route path="/loans"  element={<Loans />}     />
           <Route path="/bonuses" element={<BankBonuses />} />
-          <Route path="/todos"  element={<Todos />}     />
+          <Route path="/trades" element={<Trades />}    />
+          {/* Trading lived at /todos until it was renamed — keep old links working. */}
+          <Route path="/todos"  element={<Navigate to="/trades" replace />} />
           <Route path="/trip"   element={loading ? null : isPro ? <Trips />      : <UpgradePrompt feature="Trips" />} />
           <Route path="/split"  element={loading ? null : isPro ? <SplitCheck /> : <UpgradePrompt feature="Split the Bill" />} />
           <Route path="/admin"   element={loading ? null : isAdmin ? <Admin /> : <Navigate to="/" replace />} />
