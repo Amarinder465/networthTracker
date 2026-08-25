@@ -6,16 +6,17 @@ import { formatCurrency } from '../lib/format'
 import Modal from '../components/Modal'
 import ConfirmModal from '../components/ConfirmModal'
 
-const CATEGORIES = ['Flights', 'Hotel', 'Food', 'Drinks', 'Gas', 'Parking', 'Transportation', 'Activities', 'Shopping', 'Other']
+const CATEGORIES = ['Flights', 'Hotel', 'Car Rental', 'Food', 'Drinks', 'Gas', 'Parking', 'Transportation', 'Activities', 'Shopping', 'Other']
 
 const CAT_ICON = {
   Flights: '✈️', Hotel: '🏨', Food: '🍽️', Drinks: '🍹',
-  Gas: '⛽', Parking: '🅿️', Transportation: '🚗',
+  Gas: '⛽', Parking: '🅿️', Transportation: '🚌',
+  'Car Rental': '🚗',
   Activities: '🎯', Shopping: '🛍️', Other: '📦',
 }
 const TABS = ['People', 'Expenses', 'Summary', 'Overview']
 
-const EMPTY_EXPENSE = { description: '', category: 'Food', amount: '', paidBy: '', involved: [] }
+const EMPTY_EXPENSE = { description: '', category: 'Food', amount: '', paidBy: '', involved: [], date: '' }
 
 // ── Paste import ──
 const MONTH_RE  = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b/i
@@ -28,7 +29,8 @@ const CATEGORY_RULES = [
   [/(parking|garage|park ?mobile|meter)/i, 'Parking'],
   [/(airlines?|airways|delta air|united air|southwest air|jetblue|alaska air|frontier air|spirit air|\bairport\b)/i, 'Flights'],
   [/(hotel|motel|lodge|resort|airbnb|vrbo|marriott|hilton|hyatt|\binn\b)/i, 'Hotel'],
-  [/(turo|uber|lyft|taxi|hertz|enterprise rent|avis|budget rent|car rental|amtrak|transit|shuttle)/i, 'Transportation'],
+  [/(turo|hertz|enterprise rent|avis|budget rent|national car|alamo|sixt|dollar rent|thrifty|car rental|rent a car)/i, 'Car Rental'],
+  [/(uber|lyft|taxi|cab|amtrak|transit|shuttle|metro|subway rail)/i, 'Transportation'],
   [/(liquor|brewery|brewing|winery|bar\b|\bpub\b|tavern|taproom|cocktail|distiller|wine|spirits)/i, 'Drinks'],
   [/(national park|adventure|excursion|rafting|zipline|gondola|lift ticket|museum|\btour\b|guide|rentals?)/i, 'Activities'],
   [/(restaurant|cafe|coffee|grill|kitchen|pizza|burger|taco|sushi|ramen|cuisine|bbq|deli|bakery|gelato|ice cream|scoops|creamery|diner|eatery|bistro|kfc|mcdonald|chipotle|subway|panera|starbucks|dunkin|\bfood\b)/i, 'Food'],
@@ -128,35 +130,57 @@ function calcSettlements(people, expenses, fallbackPayer) {
 }
 
 const MONTH_INDEX = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 }
-const MONTH_LABEL = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const DATE_IN_TEXT = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})\b/gi
 
-// split_expenses has no date column yet, so the date lives in the description
-// ("Tank Full \u00b7 Aug 20"). Read the last month+day mentioned; for a range
-// like "moab aug 16-18" that still yields the start date.
-function parseExpenseDate(description) {
-  const matches = [...(description ?? '').matchAll(DATE_IN_TEXT)]
-  if (!matches.length) return null
-  const [, month, day] = matches[matches.length - 1]
-  const m = MONTH_INDEX[month.slice(0, 3).toLowerCase()]
-  const d = Number(day)
-  if (m === undefined || !(d >= 1 && d <= 31)) return null
-  return { month: m, day: d, label: `${MONTH_LABEL[m]} ${d}` }
+function pad(n) { return String(n).padStart(2, '0') }
+
+// A trip rarely spans New Year, so anchor a bare "Aug 20" to the trip's start
+// year and only roll forward when the month sits well before it.
+function resolveYear(month, trip) {
+  const start = trip?.start_date
+  if (!start) return new Date().getFullYear()
+  const startYear = Number(start.slice(0, 4))
+  const startMonth = Number(start.slice(5, 7)) - 1
+  return month < startMonth - 6 ? startYear + 1 : startYear
 }
 
-// Trips are short, so month+day sorts correctly on its own except across a
-// year boundary — anchor to the trip's start month and roll December into the
-// previous year when a trip spans New Year.
-function expenseSortKey(parsed, trip) {
-  if (!parsed) return Number.POSITIVE_INFINITY
-  const startMonth = trip?.start_date ? Number(trip.start_date.slice(5, 7)) - 1 : null
-  const yearOffset = (startMonth !== null && parsed.month < startMonth - 6) ? 1 : 0
-  return yearOffset * 10000 + parsed.month * 100 + parsed.day
+// Turns whatever the paste parser found ("Aug 20", "8/20", "Yesterday") into
+// the YYYY-MM-DD the date column wants.
+function labelToISO(label, trip) {
+  if (!label) return ''
+  const rel = label.match(/^(yesterday|today)$/i)
+  if (rel) {
+    const d = new Date()
+    if (rel[1].toLowerCase() === 'yesterday') d.setDate(d.getDate() - 1)
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  }
+  const named = label.match(/^([a-z]{3,})\.?\s+(\d{1,2})$/i)
+  if (named) {
+    const month = MONTH_INDEX[named[1].slice(0, 3).toLowerCase()]
+    if (month === undefined) return ''
+    return `${resolveYear(month, trip)}-${pad(month + 1)}-${pad(Number(named[2]))}`
+  }
+  const slash = label.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/)
+  if (slash) {
+    const month = Number(slash[1]) - 1
+    const year = slash[3] ? Number(slash[3].length === 2 ? `20${slash[3]}` : slash[3]) : resolveYear(month, trip)
+    return `${year}-${pad(month + 1)}-${pad(Number(slash[2]))}`
+  }
+  return ''
 }
 
-// The date becomes the group heading, so drop it from the row itself.
-function stripDateSuffix(description) {
-  return (description ?? '').replace(/\s*[\u00b7\u2013\u2014-]\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\s*$/i, '').trim()
+function groupLabel(iso) {
+  if (!iso) return 'No date'
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+// Default a new expense to today when the trip is happening now, otherwise to
+// the day it started.
+function defaultExpenseDate(trip) {
+  if (!trip?.start_date) return ''
+  const now = new Date()
+  const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+  if (today >= trip.start_date && (!trip.end_date || today <= trip.end_date)) return today
+  return trip.start_date
 }
 
 function calcNights(start, end) {
@@ -366,13 +390,13 @@ export default function Trips() {
   }
 
   function openNewExpense() {
-    setExpForm({ ...EMPTY_EXPENSE, paidBy: payer || (people.length === 1 ? people[0].name : ''), involved: people.map(p => p.name) })
+    setExpForm({ ...EMPTY_EXPENSE, paidBy: payer || (people.length === 1 ? people[0].name : ''), involved: people.map(p => p.name), date: defaultExpenseDate(active) })
     setEditExpense(null)
     setExpenseModal(true)
   }
 
   function openEditExpense(exp) {
-    setExpForm({ description: exp.description, category: exp.category, amount: exp.amount, paidBy: exp.paid_by || payer || '', involved: exp.involved })
+    setExpForm({ description: exp.description, category: exp.category, amount: exp.amount, paidBy: exp.paid_by || payer || '', involved: exp.involved, date: exp.expense_date ?? '' })
     setEditExpense(exp)
     setExpenseModal(true)
   }
@@ -387,6 +411,7 @@ export default function Trips() {
       amount: Number(expForm.amount),
       paid_by: expForm.paidBy,
       involved: expForm.involved,
+      expense_date: expForm.date || null,
     }
     if (editExpense) await supabase.from('split_expenses').update(payload).eq('id', editExpense.id)
     else             await supabase.from('split_expenses').insert(payload)
@@ -411,7 +436,7 @@ export default function Trips() {
   function readImportText(text) {
     setImportText(text)
     const fallback = payer || (people.length === 1 ? people[0].name : '')
-    setImportRows(parseTransactions(text).map(r => ({ ...r, paidBy: fallback })))
+    setImportRows(parseTransactions(text).map(r => ({ ...r, paidBy: fallback, date: labelToISO(r.date, active) || defaultExpenseDate(active) })))
   }
 
   function updateImportRow(i, patch) {
@@ -429,11 +454,12 @@ export default function Trips() {
     await supabase.from('split_expenses').insert(rows.map(r => ({
       event_id: active.id,
       user_id: user.id,
-      description: r.date ? `${r.description.trim()} \u00b7 ${r.date}` : r.description.trim(),
+      description: r.description.trim(),
       category: r.category,
       amount: Number(r.amount),
       paid_by: r.paidBy,
       involved: importInvolved,
+      expense_date: r.date || null,
     })))
     const { data } = await supabase.from('split_expenses').select('*').eq('event_id', active.id).order('id', { ascending: true })
     setExpenses(data ?? [])
@@ -455,11 +481,14 @@ export default function Trips() {
     return acc
   }, {})
   const payerNames = Object.keys(paidTotals).sort((a, b) => paidTotals[b] - paidTotals[a])
-  const datedExpenses = expenses
-    .map(e => { const parsed = parseExpenseDate(e.description); return { ...e, parsed, sortKey: expenseSortKey(parsed, active) } })
-    .sort((a, b) => a.sortKey - b.sortKey || a.id - b.id)
+  const datedExpenses = [...expenses].sort((a, b) => {
+    if (a.expense_date === b.expense_date) return a.id - b.id
+    if (!a.expense_date) return 1
+    if (!b.expense_date) return -1
+    return a.expense_date < b.expense_date ? -1 : 1
+  })
   const expenseGroups = datedExpenses.reduce((groups, e) => {
-    const label = e.parsed?.label ?? 'No date'
+    const label = groupLabel(e.expense_date)
     const last = groups[groups.length - 1]
     if (last && last.label === label) last.items.push(e)
     else groups.push({ label, items: [e] })
@@ -777,7 +806,7 @@ export default function Trips() {
 
                       {/* Description + avatars */}
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm text-white truncate">{stripDateSuffix(exp.description) || exp.description}</p>
+                        <p className="font-medium text-sm text-white truncate">{exp.description}</p>
                         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                           <span className="inline-flex items-center bg-gray-800 text-gray-400 text-xs px-2 py-0.5 rounded-full">
                             {exp.category}
@@ -1041,6 +1070,9 @@ export default function Trips() {
             <Field label="Amount ($)">
               <input type="number" min="0" step="0.01" value={expForm.amount} onChange={e => setExpForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
             </Field>
+            <Field label="Date">
+              <input type="date" value={expForm.date} onChange={e => setExpForm(f => ({ ...f, date: e.target.value }))} />
+            </Field>
             <div>
               <label className="block text-sm text-gray-400 mb-2">Who paid?</label>
               <div className="grid grid-cols-2 gap-2">
@@ -1150,7 +1182,8 @@ export default function Trips() {
                           <option value="">Who paid?</option>
                           {people.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                         </select>
-                        {r.date && <span className="shrink-0 text-xs text-gray-500 self-center">{r.date}</span>}
+                        <input type="date" value={r.date} onChange={e => updateImportRow(i, { date: e.target.value })}
+                          className="shrink-0 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500" />
                       </div>
                     </div>
                   ))}
