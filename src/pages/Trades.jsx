@@ -4,12 +4,25 @@ import { useAuth } from '../context/AuthContext'
 import Modal from '../components/Modal'
 import ConfirmModal from '../components/ConfirmModal'
 
+const pad = n => String(n).padStart(2, '0')
+
+// Calendar cells are built from local components, so they must be keyed the
+// same way. toISOString() converts to UTC first, which slides the key into the
+// neighbouring day for anyone west of Greenwich in the evening.
+const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+
+// trade_date is a plain YYYY-MM-DD string; read the parts straight off it
+// rather than through Date, which would treat it as UTC midnight and drop the
+// 1st of a month into the previous one.
+const yearOf = iso => Number(iso.slice(0, 4))
+const monthOf = iso => Number(iso.slice(5, 7)) - 1
+
 export default function Trades() {
   const { user } = useAuth()
   const [trades, setTrades] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
-  const [form, setForm] = useState({ profit_loss: '', notes: '', trade_date: new Date().toISOString().split('T')[0] })
+  const [form, setForm] = useState({ profit_loss: '', notes: '', trade_date: dayKey(new Date()) })
   const [editing, setEditing] = useState(null)
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -49,7 +62,7 @@ export default function Trades() {
 
     setSaving(false)
     setModal(false)
-    setForm({ profit_loss: '', notes: '', trade_date: new Date().toISOString().split('T')[0] })
+    setForm({ profit_loss: '', notes: '', trade_date: dayKey(new Date()) })
     setEditing(null)
     load()
   }
@@ -67,13 +80,13 @@ export default function Trades() {
   }
 
   function openAddProfit() {
-    setForm({ profit_loss: '', notes: '', trade_date: selectedDay ? selectedDay.toISOString().split('T')[0] : new Date().toISOString().split('T')[0] })
+    setForm({ profit_loss: '', notes: '', trade_date: dayKey(selectedDay ?? new Date()) })
     setEditing(null)
     setModal(true)
   }
 
   function openAddLoss() {
-    setForm({ profit_loss: '', notes: '', trade_date: selectedDay ? selectedDay.toISOString().split('T')[0] : new Date().toISOString().split('T')[0] })
+    setForm({ profit_loss: '', notes: '', trade_date: dayKey(selectedDay ?? new Date()) })
     setEditing(null)
     setModal(true)
   }
@@ -81,7 +94,7 @@ export default function Trades() {
   // Get trades for specific date
   function getTradesForDay(day) {
     if (!day) return []
-    const dateStr = day.toISOString().split('T')[0]
+    const dateStr = dayKey(day)
     return trades.filter(t => t.trade_date === dateStr)
   }
 
@@ -90,21 +103,21 @@ export default function Trades() {
     return getTradesForDay(day).reduce((sum, t) => sum + parseFloat(t.profit_loss || 0), 0)
   }
 
+  // Trades in a given month, newest first
+  function getTradesForMonth(year, month) {
+    return trades.filter(t => yearOf(t.trade_date) === year && monthOf(t.trade_date) === month)
+  }
+
+  const sumPL = list => list.reduce((sum, t) => sum + parseFloat(t.profit_loss || 0), 0)
+
   // Calculate monthly total
   function getMonthlyTotal(year, month) {
-    return trades
-      .filter(t => {
-        const d = new Date(t.trade_date)
-        return d.getFullYear() === year && d.getMonth() === month
-      })
-      .reduce((sum, t) => sum + parseFloat(t.profit_loss || 0), 0)
+    return sumPL(getTradesForMonth(year, month))
   }
 
   // Calculate yearly total
   function getYearlyTotal(year) {
-    return trades
-      .filter(t => new Date(t.trade_date).getFullYear() === year)
-      .reduce((sum, t) => sum + parseFloat(t.profit_loss || 0), 0)
+    return sumPL(trades.filter(t => yearOf(t.trade_date) === year))
   }
 
   // Calendar helpers
@@ -141,10 +154,46 @@ export default function Trades() {
   const totalTrades = trades.length
   const totalProfit = trades.reduce((sum, t) => sum + parseFloat(t.profit_loss || 0), 0)
 
-  const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1))
-  const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1))
-  const prevYear = () => setCurrentDate(new Date(currentDate.getFullYear() - 1, currentDate.getMonth()))
-  const nextYear = () => setCurrentDate(new Date(currentDate.getFullYear() + 1, currentDate.getMonth()))
+  // Moving the calendar has to move the side panel with it. Leaving the old
+  // selected day in place left the panel summarising a date that was not even
+  // on screen — jump to a March and it still totalled up today in August.
+  function goToMonth(year, month) {
+    setCurrentDate(new Date(year, month, 1))
+    const today = new Date()
+    const landingOnThisMonth = today.getFullYear() === year && today.getMonth() === month
+    // No day picked means the panel widens to the whole month, which is the
+    // useful default when you have just jumped somewhere new.
+    setSelectedDay(landingOnThisMonth ? new Date(year, month, today.getDate()) : null)
+  }
+
+  const prevMonth = () => goToMonth(currentDate.getFullYear(), currentDate.getMonth() - 1)
+  const nextMonth = () => goToMonth(currentDate.getFullYear(), currentDate.getMonth() + 1)
+  const prevYear = () => goToMonth(currentDate.getFullYear() - 1, currentDate.getMonth())
+  const nextYear = () => goToMonth(currentDate.getFullYear() + 1, currentDate.getMonth())
+
+  // What the side panel is currently describing: the picked day, else the month
+  // on screen, else the whole year while the year grid is up.
+  const panel = (() => {
+    if (viewMode === 'year') {
+      const list = trades.filter(t => yearOf(t.trade_date) === currentDate.getFullYear())
+      return { title: String(currentDate.getFullYear()), hint: 'Pick a month to zoom in', list, showDates: true }
+    }
+    if (selectedDay) {
+      return {
+        title: selectedDay.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+        hint: 'Tap the day again for the whole month',
+        list: getTradesForDay(selectedDay),
+        showDates: false,
+      }
+    }
+    return {
+      title: currentDate.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
+      hint: 'Pick a day to narrow it down',
+      list: getTradesForMonth(currentDate.getFullYear(), currentDate.getMonth()),
+      showDates: true,
+    }
+  })()
+  const panelTotal = sumPL(panel.list)
 
   return (
     <div className="space-y-8 overflow-x-hidden animate-fadeInUp">
@@ -270,7 +319,7 @@ export default function Trades() {
                     return (
                       <button
                         key={idx}
-                        onClick={() => day.date && setSelectedDay(day.date)}
+                        onClick={() => day.date && setSelectedDay(isSelected ? null : day.date)}
                         className={`aspect-square p-1 sm:p-2 rounded-lg text-xs sm:text-sm font-medium transition-colors flex flex-col items-center justify-center relative min-w-0 ${
                           day.grayed
                             ? 'bg-gray-800/30 text-gray-600'
@@ -308,7 +357,7 @@ export default function Trades() {
                     <button
                       key={monthIdx}
                       onClick={() => {
-                        setCurrentDate(new Date(currentDate.getFullYear(), monthIdx, 1))
+                        goToMonth(currentDate.getFullYear(), monthIdx)
                         setViewMode('month')
                       }}
                       className="bg-gray-800 border border-gray-700 rounded-lg p-3 sm:p-4 text-center hover:border-brand-500 hover:bg-gray-700 transition-colors cursor-pointer"
@@ -327,28 +376,26 @@ export default function Trades() {
           </div>
         </div>
 
-          {/* Selected Day Trades - Side Panel */}
-          {selectedDay && viewMode === 'month' && (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-6 overflow-hidden flex flex-col max-h-96 lg:max-h-none w-full">
+          {/* Side panel — always scoped to whatever the calendar is showing */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-6 overflow-hidden flex flex-col max-h-96 lg:max-h-none w-full">
               <div className="border-b border-gray-700 pb-3 sm:pb-4 mb-3 sm:mb-4">
                 <h3 className="font-semibold text-base sm:text-lg mb-1 sm:mb-2">
-                  {selectedDay.toLocaleDateString('en-US', {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                  })}
+                  {panel.title}
                 </h3>
                 <span className={`text-xl sm:text-2xl font-bold ${
-                  getDailyTotal(selectedDay) >= 0 ? 'text-green-400' : 'text-red-400'
+                  panelTotal >= 0 ? 'text-green-400' : 'text-red-400'
                 }`}>
-                  ${getDailyTotal(selectedDay).toFixed(2)}
+                  ${panelTotal.toFixed(2)}
                 </span>
+                <p className="text-xs text-gray-500 mt-1">
+                  {panel.list.length} trade{panel.list.length === 1 ? '' : 's'} · {panel.hint}
+                </p>
               </div>
               <div className="space-y-2 overflow-y-auto flex-1">
-                {getTradesForDay(selectedDay).length === 0 ? (
-                  <p className="text-gray-500 text-xs sm:text-sm">No trades for this day.</p>
+                {panel.list.length === 0 ? (
+                  <p className="text-gray-500 text-xs sm:text-sm">No trades in this period.</p>
                 ) : (
-                  getTradesForDay(selectedDay).map(trade => (
+                  panel.list.map(trade => (
                     <div
                       key={trade.id}
                       className="bg-gray-800 border border-gray-700 rounded-lg p-2 sm:p-3 flex items-start gap-2 sm:gap-3 group"
@@ -358,6 +405,11 @@ export default function Trades() {
                           parseFloat(trade.profit_loss) >= 0 ? 'text-green-400' : 'text-red-400'
                         }`}>
                           {parseFloat(trade.profit_loss) >= 0 ? '+' : ''}${parseFloat(trade.profit_loss).toFixed(2)}
+                          {panel.showDates && (
+                            <span className="text-gray-500 font-normal ml-2">
+                              {new Date(`${trade.trade_date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </span>
+                          )}
                         </p>
                         {trade.notes && (
                           <p className="text-xs text-gray-400 mt-1 break-words line-clamp-2">
@@ -383,8 +435,7 @@ export default function Trades() {
                   ))
                 )}
               </div>
-            </div>
-          )}
+          </div>
         </div>
       )}
 
