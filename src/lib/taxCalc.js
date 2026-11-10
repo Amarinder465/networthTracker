@@ -8,7 +8,7 @@
 // the One Big Beautiful Bill tips / overtime / senior deductions.
 
 import {
-  federalTable, californiaTable, FEDERAL_FIXED, CALIFORNIA_FIXED,
+  federalTable, californiaTable, retirementTable, FEDERAL_FIXED, CALIFORNIA_FIXED,
 } from './taxTables.js'
 
 const round2 = n => Math.round(n * 100) / 100
@@ -135,15 +135,20 @@ function netCapitalGains(shortTerm, longTerm, lossLimit) {
 
 // ── Federal ─────────────────────────────────────────────────────────────────
 
-function federalEstimate(input, year) {
+// `adj`: { wageReduction } — extra pre-tax 401(k) still to come out of pay —
+// and { iraDeduction } — deductible traditional IRA contributions.
+function federalEstimate(input, year, adj = {}) {
   const t = federalTable(year)
   const fs = input.filingStatus
-  const wages = input.w2s.reduce((s, w) => s + num(w.wages), 0)
+  const wageReduction = adj.wageReduction ?? 0
+  const iraDeduction = adj.iraDeduction ?? 0
+  const grossWages = input.w2s.reduce((s, w) => s + num(w.wages), 0)
+  const wages = Math.max(0, grossWages - wageReduction)
   const withheld = input.w2s.reduce((s, w) => s + num(w.fedWithheld), 0)
   const other = num(input.otherIncome)
   const cg = netCapitalGains(input.shortTerm, input.longTerm, FEDERAL_FIXED.capitalLossLimit[fs])
 
-  const agi = wages + other + input.interest + input.dividends + cg.includedInIncome
+  const agi = wages + other + input.interest + input.dividends + cg.includedInIncome - iraDeduction
   const standard = t.standardDeduction[fs]
   const itemized = num(input.itemizedDeductions)
   const deduction = Math.max(standard, itemized)
@@ -185,7 +190,7 @@ function federalEstimate(input, year) {
   const payments = withheld + num(input.fedEstimatedPayments) + refundable
 
   return {
-    wages, other, agi, standard, itemized, deduction,
+    grossWages, wages, wageReduction, iraDeduction, other, agi, standard, itemized, deduction,
     usedItemized: itemized > standard, taxable,
     ordinaryTaxable, preferential, ordinaryTax, capitalGainsTax, incomeTax,
     credit, creditPhaseOut: Math.min(phaseOut, fullCredit), nonrefundable, refundable,
@@ -198,17 +203,20 @@ function federalEstimate(input, year) {
 
 // ── California ──────────────────────────────────────────────────────────────
 
-function californiaEstimate(input, year) {
+// California excludes pre-tax 401(k) pay and follows the federal IRA deduction.
+function californiaEstimate(input, year, adj = {}) {
   const t = californiaTable(year)
   const fs = input.filingStatus
+  const iraDeduction = adj.iraDeduction ?? 0
   // Box 16 when the W-2 has it; otherwise fall back to federal wages.
-  const wages = input.w2s.reduce((s, w) => s + (num(w.stateWages) || num(w.wages)), 0)
+  const grossWages = input.w2s.reduce((s, w) => s + (num(w.stateWages) || num(w.wages)), 0)
+  const wages = Math.max(0, grossWages - (adj.wageReduction ?? 0))
   const withheld = input.w2s.reduce((s, w) => s + num(w.stateWithheld), 0)
   const other = num(input.otherIncome)
   const cg = netCapitalGains(input.shortTerm, input.longTerm, CALIFORNIA_FIXED.capitalLossLimit[fs])
 
   // California taxes every gain, dividend and interest dollar as ordinary income.
-  const agi = wages + other + input.interest + input.dividends + cg.includedInIncome
+  const agi = wages + other + input.interest + input.dividends + cg.includedInIncome - iraDeduction
   const deduction = t.standardDeduction[fs]
   const taxable = Math.max(0, agi - deduction)
   const baseTax = bracketTax(taxable, t.brackets[fs])
@@ -228,7 +236,7 @@ function californiaEstimate(input, year) {
   const payments = withheld + num(input.caEstimatedPayments)
 
   return {
-    wages, other, agi, deduction, taxable, baseTax, credits, bhst, totalTax,
+    grossWages, wages, wageReduction: grossWages - wages, iraDeduction, other, agi, deduction, taxable, baseTax, credits, bhst, totalTax,
     withheld, estimatedPayments: num(input.caEstimatedPayments), payments,
     balance: payments - totalTax,
     marginalRate: marginalRate(taxable, t.brackets[fs]),
@@ -296,21 +304,106 @@ export function effectiveIncome(doc, year) {
   }
 }
 
+// ── Retirement contributions ────────────────────────────────────────────────
+//
+// Roth IRA money goes in after tax, so it never lowers this year's bill.
+// A traditional IRA is deductible (unless a workplace plan + income phases it
+// out), and extra pre-tax 401(k) pay comes off W-2 wages. California follows
+// both.
+
+// Pub 590-A worksheet: the allowed amount shrinks across the MAGI range,
+// rounded up to the next $10, with a $200 floor until it is fully phased out.
+export function phasedLimit(limit, magi, [start, end]) {
+  if (magi <= start) return limit
+  if (magi >= end) return 0
+  const reduced = Math.ceil((limit * (end - magi)) / (end - start) / 10) * 10
+  return Math.min(limit, Math.max(200, reduced))
+}
+
+// r: { age50, covered, spouseCovered, alreadyIra, tradIra, rothIra, extra401k }
+// magi: AGI before any IRA deduction. compensation: wages after 401(k).
+export function retirementPlan(r = {}, filingStatus, year, magi, compensation) {
+  const t = retirementTable(year)
+  const fs = filingStatus
+  const iraLimit = t.iraLimit + (r.age50 ? t.iraCatchUp : 0)
+  const k401Limit = t.k401Limit + (r.age50 ? t.k401CatchUp : 0)
+  const already = Math.max(0, num(r.alreadyIra))
+  // One IRA limit is shared by traditional + Roth, and can't exceed pay.
+  const room = Math.max(0, Math.min(iraLimit, Math.max(0, compensation)) - already)
+  const tradPlanned = Math.max(0, num(r.tradIra))
+  const rothPlanned = Math.max(0, num(r.rothIra))
+  const trad = Math.min(tradPlanned, room)
+  const rothMax = phasedLimit(iraLimit, magi, t.rothPhaseOut[fs])
+  const roth = Math.min(rothPlanned, room - trad, rothMax)
+
+  let tradPhaseOut = null
+  if (r.covered) tradPhaseOut = t.tradCoveredPhaseOut[fs]
+  else if (fs === 'mfj' && r.spouseCovered) tradPhaseOut = t.tradSpouseCoveredPhaseOut
+  const deductibleMax = tradPhaseOut ? phasedLimit(iraLimit, magi, tradPhaseOut) : iraLimit
+  const iraDeduction = Math.min(trad, deductibleMax)
+
+  const k401Planned = Math.max(0, num(r.extra401k))
+  return {
+    iraLimit, k401Limit, already, room,
+    tradPlanned, trad, iraDeduction, deductibleMax, tradPhaseOut,
+    nondeductibleTrad: trad - iraDeduction,
+    rothPlanned, roth, rothMax, rothPhaseOut: t.rothPhaseOut[fs],
+    k401Planned, k401: Math.min(k401Planned, k401Limit),
+    overRoom: tradPlanned + rothPlanned > room + 0.005,
+    over401k: k401Planned > k401Limit,
+    magi,
+  }
+}
+
 // input: { filingStatus, childrenUnder17, otherDependents, w2s: [W-2s and
 //          pay stubs], otherIncome, itemizedDeductions, fedEstimatedPayments,
-//          caEstimatedPayments, shortTerm, longTerm, interest, dividends }
+//          caEstimatedPayments, shortTerm, longTerm, interest, dividends,
+//          retirement: { age50, covered, spouseCovered, alreadyIra, tradIra,
+//                        rothIra, extra401k } }
 export function estimateTaxes(rawInput, year) {
   const input = { ...rawInput, w2s: (rawInput.w2s ?? []).map(d => effectiveIncome(d, year)) }
-  const federal = federalEstimate(input, year)
-  const california = californiaEstimate(input, year)
+  const r = rawInput.retirement ?? {}
+  const rt = retirementTable(year)
+  const wageReduction = Math.min(Math.max(0, num(r.extra401k)), rt.k401Limit + (r.age50 ? rt.k401CatchUp : 0))
+  // MAGI for the IRA rules is AGI before the IRA deduction itself.
+  const beforeIra = federalEstimate(input, year, { wageReduction })
+  const retirement = retirementPlan(r, input.filingStatus, year, beforeIra.agi, beforeIra.wages)
+  const adj = { wageReduction, iraDeduction: retirement.iraDeduction }
+  const federal = federalEstimate(input, year, adj)
+  const california = californiaEstimate(input, year, adj)
   const totalTax = federal.totalTax + california.totalTax
   const grossIncome = Math.max(0, federal.agi)
   return {
     federal,
     california,
+    retirement,
     totalTax,
     totalPayments: federal.payments + california.payments,
     balance: federal.balance + california.balance,
     effectiveRate: grossIncome > 0 ? totalTax / grossIncome : 0,
+  }
+}
+
+// Tax saved by each kind of contribution, measured against contributing
+// nothing new: { total, tradIra, k401, roth, maxTradIra } each as
+// { federal, california, total }. `maxTradIra` is what putting all remaining
+// IRA room into a traditional IRA would save.
+export function retirementSavings(rawInput, year) {
+  const r = rawInput.retirement ?? {}
+  const base = { ...rawInput, retirement: { ...r, tradIra: 0, rothIra: 0, extra401k: 0 } }
+  const run = patch => estimateTaxes({ ...base, retirement: { ...base.retirement, ...patch } }, year)
+  const none = run({})
+  const saved = e => ({
+    federal: none.federal.totalTax - e.federal.totalTax,
+    california: none.california.totalTax - e.california.totalTax,
+    total: none.totalTax - e.totalTax,
+  })
+  return {
+    total: saved(estimateTaxes(rawInput, year)),
+    tradIra: saved(run({ tradIra: r.tradIra })),
+    k401: saved(run({ extra401k: r.extra401k })),
+    roth: saved(run({ rothIra: r.rothIra })),
+    maxTradIra: saved(run({ tradIra: none.retirement.room })),
+    room: none.retirement.room,
   }
 }

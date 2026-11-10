@@ -42,6 +42,10 @@ create policy "tax_profiles: own rows" on tax_profiles
 
 create index if not exists idx_tax_profiles_user_id on tax_profiles (user_id, tax_year);
 
+-- Retirement contribution plan for the year (added after the first release):
+--   { age50, covered, spouseCovered, alreadyIra, tradIra, rothIra, extra401k }
+alter table tax_profiles add column if not exists retirement jsonb not null default '{}'::jsonb;
+
 create or replace trigger tax_profiles_updated_at
   before update on tax_profiles
   for each row execute function update_updated_at();

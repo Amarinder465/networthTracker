@@ -112,7 +112,37 @@ export const CALIFORNIA_FIXED = {
   capitalLossLimit: { single: 3000, mfj: 3000, mfs: 1500, hoh: 3000 },
 }
 
+// IRA and 401(k) limits. 2026: IRS Notice 2025-67 / newsroom release
+// "401(k) limit increases to $24,500 for 2026, IRA limit increases to $7,500".
+// 2025: Notice 2024-80. Phase-outs are MAGI ranges [start, end].
+const RETIREMENT = {
+  2026: {
+    iraLimit: 7500,
+    iraCatchUp: 1100,
+    k401Limit: 24500,
+    k401CatchUp: 8000,
+    // Traditional IRA deduction when YOU are covered by a workplace plan.
+    tradCoveredPhaseOut: { single: [81000, 91000], hoh: [81000, 91000], mfj: [129000, 149000], mfs: [0, 10000] },
+    // Traditional IRA deduction when only your SPOUSE is covered (MFJ).
+    tradSpouseCoveredPhaseOut: [242000, 252000],
+    rothPhaseOut: { single: [153000, 168000], hoh: [153000, 168000], mfj: [242000, 252000], mfs: [0, 10000] },
+  },
+  2025: {
+    iraLimit: 7000,
+    iraCatchUp: 1000,
+    k401Limit: 23500,
+    k401CatchUp: 7500,
+    tradCoveredPhaseOut: { single: [79000, 89000], hoh: [79000, 89000], mfj: [126000, 146000], mfs: [0, 10000] },
+    tradSpouseCoveredPhaseOut: [236000, 246000],
+    rothPhaseOut: { single: [150000, 165000], hoh: [150000, 165000], mfj: [236000, 246000], mfs: [0, 10000] },
+  },
+}
+
 export const TAX_YEARS = Object.keys(FEDERAL).map(Number).sort((a, b) => b - a)
+
+export function retirementTable(year) {
+  return RETIREMENT[year] ?? RETIREMENT[TAX_YEARS[0]]
+}
 
 export function federalTable(year) {
   return FEDERAL[year] ?? FEDERAL[TAX_YEARS[0]]

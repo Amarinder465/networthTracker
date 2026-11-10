@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { FILING_STATUSES, TAX_YEARS } from '../lib/taxTables'
-import { estimateTaxes, summarizeJournal, effectiveIncome, PAY_FREQUENCIES } from '../lib/taxCalc'
+import { estimateTaxes, summarizeJournal, effectiveIncome, retirementSavings, PAY_FREQUENCIES } from '../lib/taxCalc'
 
 const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 const usd2 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -23,7 +23,18 @@ const EMPTY_PROFILE = {
   fedEstimatedPayments: '',
   caEstimatedPayments: '',
   termOverrides: {},
+  retirement: {
+    age50: false,
+    covered: false,
+    spouseCovered: false,
+    alreadyIra: '',
+    tradIra: '',
+    rothIra: '',
+    extra401k: '',
+  },
 }
+
+const RETIREMENT_MONEY_KEYS = ['alreadyIra', 'tradIra', 'rothIra', 'extra401k']
 
 const W2_FIELDS = [
   { key: 'wages', box: '1', label: 'Wages, tips, other comp.' },
@@ -91,6 +102,13 @@ function fromRow(row) {
     fedEstimatedPayments: row.fed_estimated_payments ? String(row.fed_estimated_payments) : '',
     caEstimatedPayments: row.ca_estimated_payments ? String(row.ca_estimated_payments) : '',
     termOverrides: row.term_overrides ?? {},
+    retirement: {
+      ...EMPTY_PROFILE.retirement,
+      age50: Boolean(row.retirement?.age50),
+      covered: Boolean(row.retirement?.covered),
+      spouseCovered: Boolean(row.retirement?.spouseCovered),
+      ...Object.fromEntries(RETIREMENT_MONEY_KEYS.map(k => [k, showNum(row.retirement?.[k])])),
+    },
   }
 }
 
@@ -114,6 +132,12 @@ function toRow(profile, year, userId) {
     fed_estimated_payments: toNum(profile.fedEstimatedPayments),
     ca_estimated_payments: toNum(profile.caEstimatedPayments),
     term_overrides: profile.termOverrides,
+    retirement: {
+      age50: profile.retirement.age50,
+      covered: profile.retirement.covered,
+      spouseCovered: profile.retirement.spouseCovered,
+      ...Object.fromEntries(RETIREMENT_MONEY_KEYS.map(k => [k, blankToNull(profile.retirement[k])]).filter(([, v]) => v != null)),
+    },
   }
 }
 
@@ -193,6 +217,10 @@ export default function Taxes() {
     setProfile(p => ({ ...p, ...patch }))
   }
 
+  function updateRetirement(patch) {
+    update({ retirement: { ...profile.retirement, ...patch } })
+  }
+
   function updateW2(key, patch) {
     update({ w2s: profile.w2s.map(w => (w.key === key ? { ...w, ...patch } : w)) })
   }
@@ -266,16 +294,19 @@ export default function Taxes() {
 
   // ── Math ──────────────────────────────────────────────────────────────────
   const journal = useMemo(() => summarizeJournal(rows, profile.termOverrides), [rows, profile.termOverrides])
-  const est = useMemo(() => estimateTaxes({
+  const taxInput = useMemo(() => ({
     ...profile,
     shortTerm: journal.shortTerm,
     longTerm: journal.longTerm,
     interest: journal.interest,
     dividends: journal.dividends,
-  }, year), [profile, journal, year])
+  }), [profile, journal])
+  const est = useMemo(() => estimateTaxes(taxInput, year), [taxInput, year])
+  const savings = useMemo(() => retirementSavings(taxInput, year), [taxInput, year])
 
   const fed = est.federal
   const ca = est.california
+  const plan = est.retirement
   const sortedTrades = useMemo(() => [...journal.trades].sort((a, b) =>
     (a.detected ? 1 : 0) - (b.detected ? 1 : 0) || b.date.localeCompare(a.date)), [journal.trades])
 
@@ -494,6 +525,96 @@ export default function Taxes() {
                 </div>
               </section>
 
+              {/* Retirement contributions */}
+              <section className="card space-y-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Retirement contributions</h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    A Roth IRA doesn't lower this year's tax: the money goes in after tax and comes out tax-free later.
+                    A traditional IRA and extra pre-tax 401(k) pay do lower it.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-x-6 gap-y-2">
+                  <Check checked={profile.retirement.age50} onChange={v => updateRetirement({ age50: v })}>
+                    50 or older by Dec 31
+                  </Check>
+                  <Check checked={profile.retirement.covered} onChange={v => updateRetirement({ covered: v })}>
+                    Covered by a workplace retirement plan
+                    <span className="text-slate-500"> · box 13 on your W-2</span>
+                  </Check>
+                  {profile.filingStatus === 'mfj' && (
+                    <Check checked={profile.retirement.spouseCovered} onChange={v => updateRetirement({ spouseCovered: v })}>
+                      Spouse covered by a workplace plan
+                    </Check>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                  <Field label={`IRA money already in for ${year}`} hint="Traditional + Roth">
+                    <MoneyInput value={profile.retirement.alreadyIra} onChange={v => updateRetirement({ alreadyIra: v })} />
+                  </Field>
+                  <Field label="Add to a traditional IRA" hint={`By Apr 15, ${year + 1}`}>
+                    <MoneyInput value={profile.retirement.tradIra} onChange={v => updateRetirement({ tradIra: v })} />
+                  </Field>
+                  <Field label="Add to a Roth IRA" hint="After tax">
+                    <MoneyInput value={profile.retirement.rothIra} onChange={v => updateRetirement({ rothIra: v })} />
+                  </Field>
+                  <Field label="Extra pre-tax 401(k)" hint="Through payroll by Dec 31">
+                    <MoneyInput value={profile.retirement.extra401k} onChange={v => updateRetirement({ extra401k: v })} />
+                  </Field>
+                </div>
+
+                <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-4 space-y-3 text-sm">
+                  <p className="text-slate-300">
+                    <strong className="text-white">{money(plan.room)}</strong> of IRA room left for {year} (limit {money(plan.iraLimit)},
+                    shared by traditional and Roth; you can still contribute for {year} until Apr 15, {year + 1}).
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Count only new contributions above. A rollover or transfer from another account doesn't use up room. If you're not sure
+                    whether an IRA deposit this year was a {year} contribution, check the account's contribution summary before adding more.
+                  </p>
+
+                  <SavingsRow title="Traditional IRA" amount={savings.tradIra.total} detail={savings.tradIra}>
+                    {plan.trad > 0 && plan.iraDeduction === 0 && plan.tradPhaseOut && (
+                      <>Not deductible: you're covered at work and your income ({money(plan.magi)}) is above the {money(plan.tradPhaseOut[0])}–{money(plan.tradPhaseOut[1])} phase-out.</>
+                    )}
+                    {plan.trad > 0 && plan.iraDeduction > 0 && plan.iraDeduction < plan.trad && (
+                      <>Only {money(plan.iraDeduction)} is deductible at your income ({money(plan.magi)}, phase-out {money(plan.tradPhaseOut[0])}–{money(plan.tradPhaseOut[1])}).</>
+                    )}
+                    {plan.trad > 0 && plan.iraDeduction === plan.trad && <>Fully deductible, federal and California.</>}
+                    {plan.trad === 0 && plan.room > 0 && (
+                      savings.maxTradIra.total > 0
+                        ? <>Putting your {money(plan.room)} of room into a traditional IRA would save about {money(savings.maxTradIra.total)}.</>
+                        : <>Not deductible at your income because you're covered by a workplace plan, so it wouldn't lower this year's tax.</>
+                    )}
+                  </SavingsRow>
+
+                  <SavingsRow title="Extra pre-tax 401(k)" amount={savings.k401.total} detail={savings.k401}>
+                    Lowers W-2 wages, federal and California. It has to come out of paychecks by Dec 31, so ask payroll to raise your pre-tax
+                    deferral. The {year} limit is {money(plan.k401Limit)}, including what you've already put in.
+                  </SavingsRow>
+
+                  <SavingsRow title="Roth IRA" amount={0} zeroLabel="$0 this year">
+                    No deduction now; it grows and comes out tax-free in retirement.{' '}
+                    {plan.rothMax >= plan.iraLimit
+                      ? <>At your income you can put in the full amount (phase-out {money(plan.rothPhaseOut[0])}–{money(plan.rothPhaseOut[1])}).</>
+                      : plan.rothMax > 0
+                        ? <>Your income limits it to {money(plan.rothMax)} (phase-out {money(plan.rothPhaseOut[0])}–{money(plan.rothPhaseOut[1])}).</>
+                        : <>Your income is above the {money(plan.rothPhaseOut[0])}–{money(plan.rothPhaseOut[1])} phase-out, so you can't contribute directly.</>}
+                  </SavingsRow>
+
+                  {plan.overRoom && (
+                    <p className="text-amber-300 text-xs">
+                      Your traditional + Roth amounts are more than the {money(plan.room)} of room left. Only that much is counted.
+                    </p>
+                  )}
+                  {plan.over401k && (
+                    <p className="text-amber-300 text-xs">The extra 401(k) is capped at the {money(plan.k401Limit)} limit.</p>
+                  )}
+                </div>
+              </section>
+
               {/* Journal */}
               <section className="card space-y-4">
                 <div>
@@ -563,12 +684,14 @@ export default function Taxes() {
             <div className="lg:col-span-2 space-y-6">
               <section className="card space-y-3">
                 <h2 className="text-lg font-bold text-white">Federal</h2>
-                <Line label="Wages" value={fed.wages} />
+                <Line label="Wages" value={fed.grossWages} />
+                {fed.wageReduction > 0 && <Line label="Extra pre-tax 401(k)" value={-fed.wageReduction} />}
                 {fed.other !== 0 && <Line label="Other income" value={fed.other} />}
                 <Line label="Short-term gains" value={fed.capital.ordinaryGain} />
                 <Line label="Long-term gains" value={fed.capital.preferentialGain} />
                 {fed.capital.deductibleLoss > 0 && <Line label="Capital loss deduction" value={-fed.capital.deductibleLoss} />}
                 <Line label="Dividends + interest" value={journal.dividends + journal.interest} />
+                {fed.iraDeduction > 0 && <Line label="Traditional IRA deduction" value={-fed.iraDeduction} />}
                 <Line label="Adjusted gross income" value={fed.agi} strong />
                 <Line label={fed.usedItemized ? 'Itemized deductions' : 'Standard deduction'} value={-fed.deduction} />
                 <Line label="Taxable income" value={fed.taxable} strong />
@@ -586,10 +709,12 @@ export default function Taxes() {
 
               <section className="card space-y-3">
                 <h2 className="text-lg font-bold text-white">California</h2>
-                <Line label="Wages" value={ca.wages} />
+                <Line label="Wages" value={ca.grossWages} />
+                {ca.wageReduction > 0 && <Line label="Extra pre-tax 401(k)" value={-ca.wageReduction} />}
                 {ca.other !== 0 && <Line label="Other income" value={ca.other} />}
                 <Line label="Capital gains (taxed as income)" value={ca.capital.includedInIncome} />
                 <Line label="Dividends + interest" value={journal.dividends + journal.interest} />
+                {ca.iraDeduction > 0 && <Line label="Traditional IRA deduction" value={-ca.iraDeduction} />}
                 <Line label="CA adjusted gross income" value={ca.agi} strong />
                 <Line label="Standard deduction" value={-ca.deduction} />
                 <Line label="Taxable income" value={ca.taxable} strong />
@@ -654,6 +779,33 @@ function MoneyInput({ value, onChange, placeholder = '0.00' }) {
         placeholder={placeholder.replace(/^\$/, '')}
         className="input-field w-full text-sm pl-7"
       />
+    </div>
+  )
+}
+
+function Check({ checked, onChange, children }) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="w-4 h-4 accent-cyan-400" />
+      <span>{children}</span>
+    </label>
+  )
+}
+
+function SavingsRow({ title, amount, detail, zeroLabel, children }) {
+  const saves = amount > 0.5
+  return (
+    <div className="border-t border-slate-800 pt-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="font-semibold text-white">{title}</span>
+        <span className={`font-bold tabular-nums ${saves ? 'text-emerald-400' : 'text-slate-400'}`}>
+          {saves ? `saves ${money(amount)}` : (zeroLabel ?? 'saves $0')}
+        </span>
+      </div>
+      {saves && detail && (
+        <p className="text-xs text-slate-500 mt-0.5">{money(detail.federal)} federal · {money(detail.california)} California</p>
+      )}
+      <p className="text-xs text-slate-400 mt-1">{children}</p>
     </div>
   )
 }
