@@ -15,6 +15,7 @@ import Upgrade from './pages/Upgrade'
 import Account from './pages/Account'
 import SplitShare from './pages/SplitShare'
 import BankBonuses from './pages/BankBonuses'
+import Taxes from './pages/Taxes'
 
 const FREE_NAV = [
   { to: '/',       label: 'Home',   icon: '📊' },
@@ -23,6 +24,7 @@ const FREE_NAV = [
   { to: '/loans',  label: 'Loans',  icon: '📋' },
   { to: '/bonuses',label: 'Bonuses',icon: '🎁' },
   { to: '/trades', label: 'Trading', icon: '📈' },
+  { to: '/taxes',  label: 'Taxes',  icon: '🧮' },
   { to: '/trip',   label: 'Trips',  icon: '✈️', locked: true },
   { to: '/split',  label: 'Split',  icon: '🍽️', locked: true },
 ]
@@ -34,6 +36,7 @@ const PRO_NAV = [
   { to: '/loans',  label: 'Loans',  icon: '📋' },
   { to: '/bonuses',label: 'Bonuses',icon: '🎁' },
   { to: '/trades', label: 'Trading', icon: '📈' },
+  { to: '/taxes',  label: 'Taxes',  icon: '🧮' },
   { to: '/trip',   label: 'Trips',  icon: '✈️' },
   { to: '/split',  label: 'Split',  icon: '🍽️' },
 ]
@@ -198,6 +201,7 @@ function Layout() {
           <Route path="/loans"  element={<Loans />}     />
           <Route path="/bonuses" element={<BankBonuses />} />
           <Route path="/trades" element={<Trades />}    />
+          <Route path="/taxes"  element={<Taxes />}     />
           {/* Trading lived at /todos until it was renamed — keep old links working. */}
           <Route path="/todos"  element={<Navigate to="/trades" replace />} />
           <Route path="/trip"   element={loading ? null : isPro ? <Trips />      : <UpgradePrompt feature="Trips" />} />
