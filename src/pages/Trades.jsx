@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import Modal from '../components/Modal'
 import ConfirmModal from '../components/ConfirmModal'
+import TradeStats from '../components/TradeStats'
 
 const pad = n => String(n).padStart(2, '0')
 
@@ -27,7 +28,14 @@ export default function Trades() {
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [viewMode, setViewMode] = useState('month') // 'day', 'month', 'year'
+  const [viewMode, setViewMode] = useState('month') // 'month', 'year', 'stats'
+  // Bumped by the "What if I sold everything?" button; Stats scrolls to the panel.
+  const [whatIfSignal, setWhatIfSignal] = useState(0)
+
+  function showWhatIf() {
+    setViewMode('stats')
+    setWhatIfSignal(n => n + 1)
+  }
   const [selectedDay, setSelectedDay] = useState(new Date())
 
   async function load() {
@@ -202,7 +210,13 @@ export default function Trades() {
           <h1 className="text-5xl font-bold text-white">Trade Journal</h1>
           <p className="text-cyan-400 font-medium mt-2">Track your P&L performance over time</p>
         </div>
-        <div className="flex gap-2.5 flex-shrink-0">
+        <div className="flex flex-wrap gap-2.5">
+          <button
+            onClick={showWhatIf}
+            className="bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 px-4 py-2.5 rounded-lg font-semibold text-xs sm:text-sm transition-all whitespace-nowrap"
+          >
+            What if I sold everything?
+          </button>
           <button
             onClick={openAddLoss}
             className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 px-4 py-2.5 rounded-lg font-semibold text-xs sm:text-sm transition-all whitespace-nowrap"
@@ -260,11 +274,23 @@ export default function Trades() {
         >
           Year
         </button>
+        <button
+          onClick={() => setViewMode('stats')}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+            viewMode === 'stats'
+              ? 'bg-teal-600 text-white shadow-lg shadow-teal-500/25'
+              : 'bg-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-700'
+          }`}
+        >
+          Stats
+        </button>
       </div>
 
       {/* Calendar & Trades */}
       {loading ? (
         <div className="card text-center text-slate-400">⏳ Loading…</div>
+      ) : viewMode === 'stats' ? (
+        <TradeStats rows={trades} whatIfSignal={whatIfSignal} />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
           {/* Calendar - 2/3 width on desktop */}
